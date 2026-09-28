@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>智课排 · 全校总表视觉稿</title>
+<style>
+:root{
+  --bg:#F8FAFC; --panel:#FFFFFF; --panel-2:#F1F5F9; --line:#E2E8F0; --line-strong:#CBD5E1;
+  --text:#0F172A; --text-2:#64748B; --text-3:#94A3B8;
+  --brand:#4F46E5; --brand-weak:#EEF2FF; --brand-line:#C7D2FE;
+  --ok:#10B981; --warn:#F59E0B; --err:#EF4444;
+  --ok-bg:#ECFDF5; --warn-bg:#FFFBEB; --err-bg:#FEF2F2;
+  --sh-sm:0 1px 2px rgba(15,23,42,.06);
+  --sh-md:0 4px 12px rgba(15,23,42,.10);
+  --sh-lg:0 12px 28px rgba(15,23,42,.18);
+  --t:150ms cubic-bezier(.4,0,.2,1);
+  --cw:58px;   /* 列宽，随缩放变化 */
+  --ch:30px;   /* 行高 */
+}
+[data-theme="dark"]{
+  --bg:#0F172A; --panel:#1E293B; --panel-2:#172033; --line:#334155; --line-strong:#475569;
+  --text:#F1F5F9; --text-2:#94A3B8; --text-3:#64748B;
+  --brand:#818CF8; --brand-weak:#1E1B4B; --brand-line:#3730A3;
+  --ok-bg:#022C22; --warn-bg:#292014; --err-bg:#2C1214;
+  --sh-sm:0 1px 2px rgba(0,0,0,.3); --sh-md:0 4px 12px rgba(0,0,0,.4); --sh-lg:0 12px 28px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Inter","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;background:var(--bg);color:var(--text);
+  font-size:14px;line-height:20px;-webkit-font-smoothing:antialiased;
+  transition:background var(--t),color var(--t);overflow:hidden
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:6px;border:3px solid var(--bg)}
+::-webkit-scrollbar-corner{background:transparent}
+
+.app{display:flex;flex-direction:column;height:100vh;padding-bottom:36px}
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.logo-mark{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#6366F1,#4F46E5);
+  display:grid;place-items:center;color:#fff;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(79,70,229,.35)}
+.sep{width:1px;height:20px;background:var(--line)}
+.school{font-size:13px;color:var(--text-2)}
+.spacer{flex:1}
+.icon-btn{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--text-2);transition:all var(--t)}
+.icon-btn:hover{background:var(--panel-2);color:var(--text)}
+
+.body{flex:1;display:flex;min-height:0}
+.nav{width:190px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+  padding:10px 8px;display:flex;flex-direction:column;gap:1px;overflow-y:auto}
+.nav-group{font-size:11px;color:var(--text-3);padding:12px 10px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;
+  color:var(--text-2);font-size:13px;transition:all var(--t);width:100%}
+.nav-item:hover{background:var(--panel-2);color:var(--text)}
+.nav-item.active{background:var(--brand-weak);color:var(--brand);font-weight:600}
+.nav-item .ico{width:16px;text-align:center;flex:none;font-size:14px}
+.nav-item .dot{width:6px;height:6px;border-radius:50%;background:var(--line-strong);margin-left:auto}
+.nav-item .dot.done{background:var(--ok)}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+
+/* 工具栏 */
+.toolbar{flex:none;display:flex;align-items:center;gap:10px;padding:9px 16px;
+  background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.seg{display:flex;background:var(--panel-2);border-radius:8px;padding:3px;gap:2px}
+.seg button{padding:5px 13px;border-radius:6px;font-size:13px;color:var(--text-2);transition:all var(--t)}
+.seg button.on{background:var(--panel);color:var(--text);font-weight:600;box-shadow:var(--sh-sm)}
+.select{display:flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);
+  border-radius:6px;background:var(--panel);font-size:13px;transition:all var(--t)}
+.select:hover{border-color:var(--line-strong)}
+.select .caret{color:var(--text-3);font-size:10px}
+.btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);
+  font-size:13px;background:var(--panel);transition:all var(--t)}
+.btn:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn.primary:hover{filter:brightness(1.08)}
+
+/* 缩放控件 */
+.zoom{display:flex;align-items:center;gap:8px;padding:4px 10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel)}
+.zoom button{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;
+  color:var(--text-2);font-size:14px;line-height:1}
+.zoom button:hover{background:var(--panel-2);color:var(--text)}
+.zoom input[type=range]{width:96px;accent-color:var(--brand);cursor:pointer}
+.zoom .pct{font-size:12px;color:var(--text-2);width:34px;text-align:right}
+
+/* 统计条 */
+.statbar{flex:none;display:flex;align-items:center;gap:0;padding:0 16px;background:var(--panel);
+  border-bottom:1px solid var(--line);height:38px;overflow-x:auto}
+.st{display:flex;align-items:baseline;gap:6px;padding:0 16px;border-right:1px solid var(--line);white-space:nowrap}
+.st:first-child{padding-left:0}
+.st .k{font-size:11.5px;color:var(--text-3)}
+.st .v{font-size:14px;font-weight:700}
+.st .v.ok{color:var(--ok)}
+.st .v.warn{color:var(--warn)}
+.st .u{font-size:11px;color:var(--text-2);font-weight:500}
+.statbar .legend{margin-left:auto;display:flex;gap:10px;align-items:center;padding-left:16px;
+  font-size:11px;color:var(--text-2);border:none}
+.statbar .legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:-1px}
+
+/* ===== 总表 ===== */
+.sheet{flex:1;overflow:auto;position:relative;background:var(--bg)}
+table.ov{border-collapse:separate;border-spacing:0;table-layout:fixed}
+table.ov th,table.ov td{padding:0;margin:0}
+
+/* 表头：年级分组行 */
+.gh{
+  position:sticky;top:0;z-index:30;height:26px;background:var(--panel);
+  border-bottom:1px solid var(--line);border-right:2px solid var(--line-strong);
+  font-size:12px;font-weight:600;color:var(--text);text-align:center;
+}
+.gh.g0{background:linear-gradient(0deg,rgba(99,102,241,.10),rgba(99,102,241,.10)),var(--panel)}
+.gh.g1{background:linear-gradient(0deg,rgba(16,185,129,.10),rgba(16,185,129,.10)),var(--panel)}
+.gh.g2{background:linear-gradient(0deg,rgba(245,158,11,.10),rgba(245,158,11,.10)),var(--panel)}
+
+/* 表头：班级行 */
+.ch{
+  position:sticky;top:26px;z-index:30;height:28px;background:var(--panel);
+  border-bottom:1px solid var(--line-strong);border-right:1px solid var(--line);
+  font-size:11px;color:var(--text-2);font-weight:500;text-align:center;white-space:nowrap
+}
+.ch.gend{border-right:2px solid var(--line-strong)}
+
+/* 左侧固定：星期/节次 */
+.dh{
+  position:sticky;left:0;z-index:25;background:var(--panel);border-right:2px solid var(--line-strong);
+  border-bottom:1px solid var(--line);width:34px;min-width:34px;
+  font-size:11px;font-weight:600;color:var(--text-2);text-align:center;vertical-align:middle;
+  writing-mode:vertical-rl;letter-spacing:.14em
+}
+.ph{
+  position:sticky;left:34px;z-index:25;background:var(--panel);border-right:2px solid var(--line-strong);
+  border-bottom:1px solid var(--line);width:40px;min-width:40px;
+  font-size:11px;color:var(--text-3);text-align:center;vertical-align:middle
+}
+.corner{position:sticky;left:0;top:0;z-index:40;background:var(--panel);
+  border-right:2px solid var(--line-strong);border-bottom:1px solid var(--line)}
+.corner2{position:sticky;left:34px;top:0;z-index:40;background:var(--panel);
+  border-right:2px solid var(--line-strong);border-bottom:1px solid var(--line)}
+
+/* 单元格 */
+td.c{
+  height:var(--ch);width:var(--cw);min-width:var(--cw);max-width:var(--cw);
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  font-size:11px;text-align:center;vertical-align:middle;overflow:hidden;white-space:nowrap;
+  cursor:default;transition:filter var(--t),outline var(--t);position:relative
+}
+td.c.gend{border-right:2px solid var(--line-strong)}
+td.c:hover{outline:2px solid var(--brand);outline-offset:-2px;z-index:10;filter:brightness(.96)}
+td.c .t{font-size:9px;opacity:.72;display:block;line-height:10px;margin-top:-1px}
+/* 缩略模式：只留色块 */
+body.compact td.c .t{display:none}
+body.compact td.c{font-size:9px}
+body.micro td.c{font-size:0}
+body.micro td.c .t{display:none}
+/* 日分隔 */
+tr.dayend td,tr.dayend .dh,tr.dayend .ph{border-bottom:2px solid var(--line-strong)}
+/* 午休行 */
+tr.lunch td{height:14px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+tr.lunch .lz{font-size:10px;color:var(--text-3);text-align:center;letter-spacing:.3em}
+/* 冲突单元格 */
+td.c.conflict{outline:2px solid var(--err);outline-offset:-2px;z-index:8}
+td.c.conflict::after{content:"";position:absolute;top:1px;right:1px;width:5px;height:5px;
+  border-radius:50%;background:var(--err)}
+
+/* Tooltip */
+.tip{
+  position:fixed;z-index:200;background:var(--panel);border:1px solid var(--line);
+  box-shadow:var(--sh-md);border-radius:9px;padding:9px 11px;font-size:12px;
+  pointer-events:none;opacity:0;transition:opacity 120ms;min-width:150px
+}
+.tip.show{opacity:1}
+.tip .th{font-size:13px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.tip .th i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.tip .r{display:flex;justify-content:space-between;gap:16px;color:var(--text-2);line-height:18px}
+.tip .r b{color:var(--text);font-weight:500}
+
+.demo-bar{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--line);
+  padding:7px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-2);z-index:60}
+.demo-bar b{color:var(--text)}
+.demo-bar .k{padding:1px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:11px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="logo"><span class="logo-mark">课</span>智课排</div>
+    <div class="sep"></div>
+    <span class="school">阳光实验初级中学 · 2026-2027学年第一学期</span>
+    <div class="spacer"></div>
+    <button class="icon-btn">⌕</button>
+    <button class="icon-btn" id="themeBtn" title="切换主题">◐</button>
+    <button class="icon-btn">?</button>
+  </div>
+
+  <div class="body">
+    <nav class="nav">
+      <button class="nav-item"><span class="ico">⌂</span>工作台</button>
+      <div class="nav-group">配置</div>
+      <button class="nav-item"><span class="ico">⚙</span>学校设置<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">▤</span>基础数据<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">▦</span>教学任务<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">⚖</span>排课规则<span class="dot done"></span></button>
+      <div class="nav-group">排课</div>
+      <button class="nav-item"><span class="ico">▶</span>开始排课<span class="dot done"></span></button>
+      <button class="nav-item active"><span class="ico">▣</span>课表</button>
+      <button class="nav-item"><span class="ico">◍</span>体检报告</button>
+      <div class="nav-group">输出</div>
+      <button class="nav-item"><span class="ico">↥</span>导出中心</button>
+      <button class="nav-item"><span class="ico">◷</span>版本历史</button>
+    </nav>
+
+    <div class="main">
+
+      <div class="toolbar">
+        <div class="seg">
+          <button data-v="class">班级课表</button>
+          <button data-v="teacher">教师课表</button>
+          <button data-v="room">教室课表</button>
+          <button class="on" data-v="all">全校总表</button>
+        </div>
+        <div class="select">全部年级 <span class="caret">▾</span></div>
+        <div class="select">竖排（班级为列）<span class="caret">▾</span></div>
+        <div class="spacer"></div>
+        <div class="zoom">
+          <button onclick="stepZoom(-10)">−</button>
+          <input type="range" id="zoom" min="40" max="150" value="100" step="5">
+          <span class="pct" id="zoomPct">100%</span>
+          <button onclick="stepZoom(10)">+</button>
+        </div>
+        <button class="btn" onclick="fit()">⤢ 适应宽度</button>
+        <button class="btn primary">↥ 导出</button>
+      </div>
+
+      <div class="statbar">
+        <div class="st"><span class="k">班级</span><span class="v">60</span><span class="u">个</span></div>
+        <div class="st"><span class="k">课时</span><span class="v">2,100</span><span class="u">节</span></div>
+        <div class="st"><span class="k">教师</span><span class="v">152</span><span class="u">人</span></div>
+        <div class="st"><span class="k">硬性冲突</span><span class="v ok">0</span><span class="u">处</span></div>
+        <div class="st"><span class="k">空位</span><span class="v warn">28</span><span class="u">处</span></div>
+        <div class="st"><span class="k">综合评分</span><span class="v ok">92.4</span></div>
+        <div class="st legend" id="legend"></div>
+      </div>
+
+      <div class="sheet" id="sheet">
+        <table class="ov" id="ov"></table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<div class="demo-bar">
+  <b>视觉稿演示：</b>
+  <span>拖动缩放滑块 <b>40%→150%</b> 观察<b>降级渲染</b></span>
+  <span class="k">·</span>
+  <span>悬停任意格看详情</span>
+  <span class="k">·</span>
+  <span>横竖表头均<b>冻结</b></span>
+  <div class="spacer" style="flex:1"></div>
+  <button class="btn" onclick="location.href='timetable.html'">课表页</button>
+  <button class="btn" onclick="location.href='report.html'">体检报告</button>
+</div>
+
+<script>
+/* ============ 主题 ============ */
+document.getElementById('themeBtn').onclick=()=>{
+  const h=document.documentElement;
+  h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';
+};
+
+/* ============ 学科定义 ============ */
+const SUBS=[
+  {n:'语文',s:'语',bg:'#FEF2F2',tx:'#B91C1C',ac:'#EF4444',w:5,main:1},
+  {n:'数学',s:'数',bg:'#EEF2FF',tx:'#4338CA',ac:'#6366F1',w:5,main:1},
+  {n:'英语',s:'英',bg:'#ECFDF5',tx:'#047857',ac:'#10B981',w:5,main:1},
+  {n:'物理',s:'物',bg:'#EFF6FF',tx:'#1D4ED8',ac:'#3B82F6',w:3,main:1},
+  {n:'化学',s:'化',bg:'#FFFBEB',tx:'#B45309',ac:'#F59E0B',w:2,main:1},
+  {n:'生物',s:'生',bg:'#F7FEE7',tx:'#4D7C0F',ac:'#84CC16',w:2,main:0},
+  {n:'道法',s:'道',bg:'#FAF5FF',tx:'#7E22CE',ac:'#A855F7',w:2,main:0},
+  {n:'历史',s:'史',bg:'#FEF3C7',tx:'#92400E',ac:'#D97706',w:2,main:0},
+  {n:'地理',s:'地',bg:'#F0FDFA',tx:'#0F766E',ac:'#14B8A6',w:2,main:0},
+  {n:'体育',s:'体',bg:'#FFF7ED',tx:'#C2410C',ac:'#F97316',w:3,main:0},
+  {n:'音乐',s:'音',bg:'#FDF2F8',tx:'#BE185D',ac:'#EC4899',w:1,main:0},
+  {n:'美术',s:'美',bg:'#FDF4FF',tx:'#A21CAF',ac:'#D946EF',w:1,main:0},
+  {n:'信息',s:'信',bg:'#F8FAFC',tx:'#475569',ac:'#64748B',w:1,main:0},
+];
+const DARK={'语文':['#2A1416','#FCA5A5'],'数学':['#1B1B3A','#A5B4FC'],'英语':['#04291F','#6EE7B7'],
+  '物理':['#111E3A','#93C5FD'],'化学':['#2B1F0A','#FCD34D'],'生物':['#1A2408','#BEF264'],
+  '道法':['#241534','#D8B4FE'],'历史':['#2B1D06','#FCD34D'],'地理':['#04261F','#5EEAD4'],
+  '体育':['#2C1608','#FDBA74'],'音乐':['#2C0F20','#F9A8D4'],'美术':['#28102C','#F0ABFC'],
+  '信息':['#1A2231','#CBD5E1']};
+
+const SURNAME='张李王刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾侯邵孟龙万段雷钱汤尹黎易常武乔贺赖龚文';
+const GIVEN='明红芳伟静磊涛刚敏丽强军杰勇艳娟秀英霞平燕玲桂兰凤鹏华健世广志义兴良海山仁波宁贵福生龙元全国胜学祥才发武新利清飞彬富顺信子杰楠榕风航弘';
+
+/* 确定性伪随机 */
+let seed=20260928;
+function rnd(){ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }
+function pick(a){ return a[Math.floor(rnd()*a.length)]; }
+
+/* ============ 生成数据 ============ */
+const GRADES=[
+  {name:'初一年级',n:20,cls:i=>`初一${i+1}`},
+  {name:'初二年级',n:20,cls:i=>`初二${i+1}`},
+  {name:'初三年级',n:20,cls:i=>`初三${i+1}`},
+];
+const DAYS=['周一','周二','周三','周四','周五'];
+const PERIODS=[
+  {n:'1',am:1},{n:'2',am:1},{n:'3',am:1},{n:'4',am:1},
+  {lunch:1},
+  {n:'5',am:0},{n:'6',am:0},{n:'7',am:0},
+];
+
+// 教师池：每学科若干教师
+const TEACHERS={};
+SUBS.forEach(s=>{
+  const cnt = s.main? 14 : 7;
+  TEACHERS[s.n]=Array.from({length:cnt},()=>pick(SURNAME)+pick(GIVEN));
+});
+const ROOMS={'体育':['田径场','篮球场','风雨操场'],'音乐':['音乐室1','音乐室2'],
+  '美术':['美术室1','美术室2'],'信息':['机房1','机房2','机房3'],
+  '物理':['物理室1','物理室2'],'化学':['化学室1','化学室2'],'生物':['生物室1','生物室2']};
+
+// 为每个班生成一周课表（主课偏上午）
+const CLASSES=[];
+GRADES.forEach((g,gi)=>{
+  for(let i=0;i<g.n;i++){
+    const pool=[];
+    SUBS.forEach(s=>{ for(let k=0;k<s.w;k++) pool.push(s); });
+    // 主课优先放上午
+    const am=[],pm=[];
+    pool.forEach(s=> (s.main?am:pm).push(s));
+    // 打乱
+    const sh=a=>{for(let j=a.length-1;j>0;j--){const k=Math.floor(rnd()*(j+1));[a[j],a[k]]=[a[k],a[j]]}};
+    sh(am); sh(pm);
+    const cells=[]; // [day][periodIdx]
+    for(let d=0;d<5;d++){
+      const row=[];
+      for(let p=0;p<PERIODS.length;p++){
+        if(PERIODS[p].lunch){ row.push(null); continue; }
+        const isAm=PERIODS[p].am;
+        let s = isAm ? (am.pop()||pm.pop()) : (pm.pop()||am.pop());
+        if(!s){ row.push(undefined); continue; }  // 空位
+        const t=pick(TEACHERS[s.n]);
+        const r=ROOMS[s.n]? pick(ROOMS[s.n]) : `${g.cls(i)}教室`;
+        row.push({s,t,r});
+      }
+      cells.push(row);
+    }
+    CLASSES.push({grade:gi,gname:g.name,name:g.cls(i),full:`${g.cls(i)}班`,cells});
+  }
+});
+// 制造 2 处空位演示
+CLASSES[7].cells[4][7]=undefined;
+CLASSES[23].cells[3][6]=undefined;
+
+/* ============ 渲染 ============ */
+function build(){
+  const t=document.getElementById('ov');
+  let h='';
+  // 年级分组表头
+  h+='<tr><th class="corner"></th><th class="corner2"></th>';
+  GRADES.forEach((g,gi)=>{ h+=`<th class="gh g${gi}" colspan="${g.n}">${g.name} · ${g.n}个班</th>`; });
+  h+='</tr>';
+  // 班级表头
+  h+='<tr><th class="corner" style="top:26px"></th><th class="corner2" style="top:26px"></th>';
+  CLASSES.forEach((c,ci)=>{
+    const gend = (ci+1)%20===0 ? ' gend':'';
+    h+=`<th class="ch${gend}">${c.name}</th>`;
+  });
+  h+='</tr>';
+  // 数据行
+  DAYS.forEach((d,di)=>{
+    let firstOfDay=true;
+    PERIODS.forEach((p,pi)=>{
+      if(p.lunch){
+        h+=`<tr class="lunch"><td class="dh" style="border:none"></td><td class="ph lz">午</td>`;
+        h+=`<td colspan="${CLASSES.length}" style="background:var(--panel-2)"></td></tr>`;
+        return;
+      }
+      const isDayEnd = pi===PERIODS.length-1;
+      h+=`<tr class="${isDayEnd?'dayend':''}">`;
+      if(firstOfDay){
+        h+=`<td class="dh" rowspan="${PERIODS.length}">${d}</td>`;
+        firstOfDay=false;
+      }
+      h+=`<td class="ph">${p.n}</td>`;
+      CLASSES.forEach((c,ci)=>{
+        const cell=c.cells[di][pi];
+        const gend=(ci+1)%20===0?' gend':'';
+        if(!cell){
+          h+=`<td class="c${gend}" data-i="${ci}" data-d="${di}" data-p="${pi}"
+                 style="background:var(--panel-2)"><span style="color:var(--text-3);font-size:10px">—</span></td>`;
+          return;
+        }
+        h+=`<td class="c${gend}" data-i="${ci}" data-d="${di}" data-p="${pi}" data-s="${cell.s.n}"
+               style="background:${cell.s.bg};color:${cell.s.tx};box-shadow:inset 2px 0 0 ${cell.s.ac}">
+               ${cell.s.s}<span class="t">${cell.t.slice(0,3)}</span></td>`;
+      });
+      h+='</tr>';
+    });
+  });
+  t.innerHTML=h;
+  applyDark();
+}
+function applyDark(){
+  const dark=document.documentElement.dataset.theme==='dark';
+  document.querySelectorAll('td.c[data-s]').forEach(td=>{
+    const n=td.dataset.s, s=SUBS.find(x=>x.n===n);
+    if(dark && DARK[n]){ td.style.background=DARK[n][0]; td.style.color=DARK[n][1]; }
+    else { td.style.background=s.bg; td.style.color=s.tx; }
+  });
+}
+const mo=new MutationObserver(applyDark);
+mo.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* 图例 */
+(function(){
+  const el=document.getElementById('legend');
+  el.innerHTML=SUBS.map(s=>`<span><i style="background:${s.ac}"></i>${s.n}</span>`).join('');
+})();
+
+/* ============ 缩放与降级渲染 ============ */
+const z=document.getElementById('zoom');
+function setZoom(v){
+  v=Math.max(40,Math.min(150,v));
+  z.value=v;
+  document.getElementById('zoomPct').textContent=v+'%';
+  const r=document.documentElement.style;
+  r.setProperty('--cw', Math.round(58*v/100)+'px');
+  r.setProperty('--ch', Math.round(30*v/100)+'px');
+  document.body.classList.toggle('compact', v<85);
+  document.body.classList.toggle('micro',  v<55);
+}
+z.oninput=e=>setZoom(+e.target.value);
+function stepZoom(d){ setZoom(+z.value+d); }
+function fit(){
+  const w=document.getElementById('sheet').clientWidth-74-14;
+  setZoom(Math.round(w/CLASSES.length/58*100/5)*5);
+}
+/* Ctrl+滚轮缩放 */
+document.getElementById('sheet').addEventListener('wheel',e=>{
+  if(!e.ctrlKey) return;
+  e.preventDefault(); stepZoom(e.deltaY<0?5:-5);
+},{passive:false});
+
+/* ============ Tooltip ============ */
+const tip=document.getElementById('tip');
+document.getElementById('sheet').addEventListener('mouseover',e=>{
+  const td=e.target.closest('td.c'); if(!td){tip.classList.remove('show');return;}
+  const c=CLASSES[+td.dataset.i], cell=c.cells[+td.dataset.d][+td.dataset.p];
+  if(!cell){
+    tip.innerHTML=`<div class="th">${c.full}</div>
+      <div class="r"><span>${DAYS[+td.dataset.d]} 第${PERIODS[+td.dataset.p].n}节</span><b>空位</b></div>`;
+  }else{
+    tip.innerHTML=`<div class="th"><i style="background:${cell.s.ac}"></i>${cell.s.n}</div>
+      <div class="r"><span>班级</span><b>${c.full}</b></div>
+      <div class="r"><span>时间</span><b>${DAYS[+td.dataset.d]} 第${PERIODS[+td.dataset.p].n}节</b></div>
+      <div class="r"><span>教师</span><b>${cell.t}</b></div>
+      <div class="r"><span>地点</span><b>${cell.r}</b></div>`;
+  }
+  tip.classList.add('show');
+});
+document.getElementById('sheet').addEventListener('mousemove',e=>{
+  const x=Math.min(e.clientX+14, innerWidth-tip.offsetWidth-10);
+  const y=Math.min(e.clientY+14, innerHeight-tip.offsetHeight-44);
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+});
+document.getElementById('sheet').addEventListener('mouseleave',()=>tip.classList.remove('show'));
+
+/* 视图切换 */
+document.querySelectorAll('.seg button').forEach(b=>{
+  b.onclick=()=>{document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on')};
+});
+
+build();
+setZoom(100);
+</script>
+</body>
+</html>
