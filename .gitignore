@@ -1,0 +1,70 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 构建产物
+out/
+dist/
+dist-electron/
+build/Release/
+release/
+*.tsbuildinfo
+
+# Electron 打包输出
+release-builds/
+*.exe
+*.dmg
+*.AppImage
+*.blockmap
+
+# 本地数据库与用户数据（严禁入库）
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+userData/
+
+# 基准测试与导出产物
+bench-results/
+exports/
+*.xlsx
+*.pdf
+*.png
+!resources/**/*.png
+!docs/**/*.png
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 环境与密钥
+.env
+.env.local
+.env.*.local
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 测试
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# 缓存
+.cache/
+.temp/
+.eslintcache
+.vite/
