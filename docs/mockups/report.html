@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>智课排 · 课表体检报告视觉稿</title>
+<style>
+:root{
+  --bg:#F8FAFC; --panel:#FFFFFF; --panel-2:#F1F5F9; --line:#E2E8F0; --line-strong:#CBD5E1;
+  --text:#0F172A; --text-2:#64748B; --text-3:#94A3B8;
+  --brand:#4F46E5; --brand-weak:#EEF2FF; --brand-line:#C7D2FE;
+  --ok:#10B981; --warn:#F59E0B; --err:#EF4444; --info:#3B82F6;
+  --ok-bg:#ECFDF5; --warn-bg:#FFFBEB; --err-bg:#FEF2F2; --info-bg:#EFF6FF;
+  --sh-sm:0 1px 2px rgba(15,23,42,.06);
+  --sh-md:0 4px 12px rgba(15,23,42,.10);
+  --sh-lg:0 12px 28px rgba(15,23,42,.18);
+  --t:150ms cubic-bezier(.4,0,.2,1);
+}
+[data-theme="dark"]{
+  --bg:#0F172A; --panel:#1E293B; --panel-2:#172033; --line:#334155; --line-strong:#475569;
+  --text:#F1F5F9; --text-2:#94A3B8; --text-3:#64748B;
+  --brand:#818CF8; --brand-weak:#1E1B4B; --brand-line:#3730A3;
+  --ok-bg:#022C22; --warn-bg:#292014; --err-bg:#2C1214; --info-bg:#111E3A;
+  --sh-sm:0 1px 2px rgba(0,0,0,.3); --sh-md:0 4px 12px rgba(0,0,0,.4); --sh-lg:0 12px 28px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Inter","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;background:var(--bg);color:var(--text);
+  font-size:14px;line-height:20px;-webkit-font-smoothing:antialiased;
+  transition:background var(--t),color var(--t);
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:6px;border:3px solid var(--bg)}
+
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;padding-bottom:36px}
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:16px;padding:0 16px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.logo-mark{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#6366F1,#4F46E5);
+  display:grid;place-items:center;color:#fff;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(79,70,229,.35)}
+.sep{width:1px;height:20px;background:var(--line)}
+.school{font-size:13px;color:var(--text-2)}
+.spacer{flex:1}
+.icon-btn{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--text-2);transition:all var(--t)}
+.icon-btn:hover{background:var(--panel-2);color:var(--text)}
+
+.body{flex:1;display:flex;min-height:0}
+.nav{width:190px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+  padding:10px 8px;display:flex;flex-direction:column;gap:1px;overflow-y:auto}
+.nav-group{font-size:11px;color:var(--text-3);padding:12px 10px 5px;font-weight:500;letter-spacing:.04em}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;
+  color:var(--text-2);font-size:13px;transition:all var(--t);width:100%}
+.nav-item:hover{background:var(--panel-2);color:var(--text)}
+.nav-item.active{background:var(--brand-weak);color:var(--brand);font-weight:600}
+.nav-item .ico{width:16px;text-align:center;flex:none;font-size:14px}
+.nav-item .dot{width:6px;height:6px;border-radius:50%;background:var(--line-strong);margin-left:auto}
+.nav-item .dot.done{background:var(--ok)}
+
+.main{flex:1;overflow-y:auto;min-width:0}
+.toolbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:10px 24px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+.btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);
+  font-size:13px;background:var(--panel);transition:all var(--t)}
+.btn:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn.primary:hover{filter:brightness(1.08)}
+.select{display:flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);
+  border-radius:6px;background:var(--panel);font-size:13px}
+.select .caret{color:var(--text-3);font-size:10px}
+
+.page{padding:22px 24px 40px;max-width:1240px;margin:0 auto}
+.sec-title{font-size:13px;font-weight:600;color:var(--text-2);margin:0 0 11px;display:flex;align-items:center;gap:7px}
+.sec-title .n{color:var(--text-3);font-weight:400;font-size:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.mb{margin-bottom:22px}
+
+/* ===== 顶部总评分 ===== */
+.hero{display:flex;gap:26px;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:22px 26px;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle,rgba(79,70,229,.09),transparent 70%)}
+.ring-wrap{position:relative;flex:none;width:132px;height:132px}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-txt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.ring-txt .v{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:38px}
+.ring-txt .l{font-size:11px;color:var(--text-2)}
+.hero-info{flex:1;min-width:0}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+  background:var(--ok-bg);color:#047857;font-size:12px;font-weight:600;border:1px solid rgba(16,185,129,.28)}
+[data-theme="dark"] .hero-badge{color:#6EE7B7}
+.hero-h{font-size:20px;font-weight:600;margin:9px 0 5px}
+.hero-d{font-size:13px;color:var(--text-2);line-height:21px}
+.hero-stats{display:flex;gap:26px;margin-top:15px;padding-top:15px;border-top:1px solid var(--line)}
+.hs{min-width:0}
+.hs .k{font-size:11px;color:var(--text-3)}
+.hs .v{font-size:17px;font-weight:700;margin-top:1px}
+.hs .v small{font-size:11px;font-weight:500;color:var(--text-2);margin-left:2px}
+.hs .v.ok{color:var(--ok)}
+
+/* ===== 六维度 ===== */
+.dim{display:flex;align-items:center;gap:12px;padding:9px 0}
+.dim + .dim{border-top:1px dashed var(--line)}
+.dim .dn{width:82px;flex:none;font-size:13px;color:var(--text-2)}
+.dim .db{flex:1;height:7px;border-radius:4px;background:var(--panel-2);overflow:hidden;position:relative}
+.dim .db i{display:block;height:100%;border-radius:4px;transition:width 800ms cubic-bezier(.4,0,.2,1)}
+.dim .db .base{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text-3);opacity:.5}
+.dim .dv{width:30px;text-align:right;font-size:14px;font-weight:700;flex:none}
+.dim .dt{width:44px;text-align:right;font-size:11px;flex:none}
+.dim .dt.ok{color:var(--ok)}
+.dim .dt.warn{color:var(--warn)}
+
+/* ===== 问题清单 ===== */
+.issue{display:flex;gap:11px;padding:13px 0;border-top:1px solid var(--line)}
+.issue:first-of-type{border-top:none}
+.issue.done{opacity:.5}
+.issue .ic{width:22px;height:22px;border-radius:7px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700}
+.issue .ic.w{background:var(--warn-bg);color:#B45309}
+.issue .ic.i{background:var(--info-bg);color:#1D4ED8}
+.issue .ic.d{background:var(--ok-bg);color:#047857}
+.issue .w1{flex:1;min-width:0}
+.issue .t{font-size:13.5px;font-weight:600;margin-bottom:3px}
+.issue .d{font-size:12.5px;color:var(--text-2);line-height:19px}
+.issue .d code{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:12px;font-family:inherit;color:var(--text)}
+.issue .acts{display:flex;gap:6px;margin-top:8px}
+.mini{padding:4px 10px;border-radius:6px;border:1px solid var(--line);font-size:12px;transition:all var(--t)}
+.mini:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.mini.p{background:var(--brand);color:#fff;border-color:var(--brand)}
+.mini.p:hover{filter:brightness(1.08)}
+.mini:disabled{opacity:.45;cursor:default}
+
+/* ===== 教师负荷柱状图 ===== */
+.chart{height:168px;display:flex;align-items:flex-end;gap:5px;padding:12px 0 0}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.bar-col .b{width:100%;max-width:26px;border-radius:4px 4px 2px 2px;background:var(--brand);
+  transition:all var(--t);position:relative}
+.bar-col .b:hover{filter:brightness(1.15)}
+.bar-col .b.hot{background:var(--warn)}
+.bar-col .b.cold{background:var(--line-strong)}
+.bar-col .bl{font-size:10.5px;color:var(--text-3);white-space:nowrap}
+.bar-col .bn{font-size:10px;color:var(--text-2);font-weight:600}
+.chart-legend{display:flex;gap:14px;font-size:11px;color:var(--text-2);margin-top:10px;
+  padding-top:10px;border-top:1px solid var(--line)}
+.chart-legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
+
+/* ===== 热力图 ===== */
+.heat{display:grid;grid-template-columns:44px repeat(5,1fr);gap:4px;margin-top:4px}
+.heat .hh{font-size:11px;color:var(--text-2);text-align:center;padding-bottom:2px}
+.heat .rh{font-size:11px;color:var(--text-3);display:flex;align-items:center;justify-content:flex-end;padding-right:6px}
+.heat .hc{height:26px;border-radius:5px;display:grid;place-items:center;font-size:10.5px;
+  font-weight:600;color:#fff;transition:all var(--t);cursor:default}
+.heat .hc:hover{transform:scale(1.07);box-shadow:var(--sh-sm)}
+.heat .hc.lunch{background:transparent;color:var(--text-3);font-weight:400;font-size:10px}
+
+/* ===== 对比条 ===== */
+.cmp{display:flex;align-items:center;gap:11px;padding:10px 0}
+.cmp + .cmp{border-top:1px dashed var(--line)}
+.cmp .cn{width:96px;flex:none;font-size:12.5px;color:var(--text-2)}
+.cmp .cbars{flex:1;display:flex;flex-direction:column;gap:4px}
+.cmp .cb{display:flex;align-items:center;gap:8px}
+.cmp .cb .tag{font-size:10px;width:30px;color:var(--text-3);flex:none}
+.cmp .cb .track{flex:1;height:14px;border-radius:4px;background:var(--panel-2);overflow:hidden}
+.cmp .cb .track i{display:block;height:100%;border-radius:4px}
+.cmp .cb .num{font-size:11.5px;font-weight:600;width:52px;text-align:right;flex:none}
+.cmp .win{font-size:12px;font-weight:700;color:var(--ok);width:52px;text-align:right;flex:none}
+
+/* Toast */
+.toast{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-12px);
+  background:var(--panel);border:1px solid var(--line);box-shadow:var(--sh-md);border-radius:10px;
+  padding:10px 15px;display:flex;align-items:center;gap:11px;font-size:13px;opacity:0;
+  pointer-events:none;transition:all 220ms cubic-bezier(.4,0,.2,1);z-index:100}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast .ic2{width:19px;height:19px;border-radius:50%;background:var(--ok);color:#fff;
+  display:grid;place-items:center;font-size:11px;flex:none}
+.toast .sc{font-weight:600;color:var(--ok)}
+
+.demo-bar{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--line);
+  padding:7px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-2);z-index:60}
+.demo-bar b{color:var(--text)}
+.demo-bar .k{padding:1px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:11px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="logo"><span class="logo-mark">课</span>智课排</div>
+    <div class="sep"></div>
+    <span class="school">阳光实验初级中学 · 2026-2027学年第一学期</span>
+    <div class="spacer"></div>
+    <button class="icon-btn">⌕</button>
+    <button class="icon-btn" id="themeBtn" title="切换主题">◐</button>
+    <button class="icon-btn">?</button>
+  </div>
+
+  <div class="body">
+    <nav class="nav">
+      <button class="nav-item"><span class="ico">⌂</span>工作台</button>
+      <div class="nav-group">配置</div>
+      <button class="nav-item"><span class="ico">⚙</span>学校设置<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">▤</span>基础数据<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">▦</span>教学任务<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">⚖</span>排课规则<span class="dot done"></span></button>
+      <div class="nav-group">排课</div>
+      <button class="nav-item"><span class="ico">▶</span>开始排课<span class="dot done"></span></button>
+      <button class="nav-item"><span class="ico">▣</span>课表</button>
+      <button class="nav-item active"><span class="ico">◍</span>体检报告</button>
+      <div class="nav-group">输出</div>
+      <button class="nav-item"><span class="ico">↥</span>导出中心</button>
+      <button class="nav-item"><span class="ico">◷</span>版本历史</button>
+    </nav>
+
+    <div class="main">
+      <div class="toolbar">
+        <div class="select">自动排课 #3 · 均衡 <span class="caret">▾</span></div>
+        <span style="font-size:12px;color:var(--text-3)">生成于 2026-09-28 14:32 · 用时 8.4 秒</span>
+        <div class="spacer"></div>
+        <button class="btn">⇄ 版本对比</button>
+        <button class="btn">↥ 导出报告</button>
+        <button class="btn primary" onclick="fixAll()">✦ 一键优化全部</button>
+      </div>
+
+      <div class="page">
+
+        <!-- ===== 总评分 ===== -->
+        <div class="hero mb">
+          <div class="ring-wrap">
+            <svg width="132" height="132" viewBox="0 0 132 132">
+              <circle cx="66" cy="66" r="56" fill="none" stroke="var(--panel-2)" stroke-width="11"/>
+              <circle id="ring" cx="66" cy="66" r="56" fill="none" stroke="url(#g1)" stroke-width="11"
+                stroke-linecap="round" stroke-dasharray="351.9" stroke-dashoffset="351.9"
+                style="transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)"/>
+              <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#34D399"/><stop offset="100%" stop-color="#059669"/>
+              </linearGradient></defs>
+            </svg>
+            <div class="ring-txt"><span class="v" id="scoreNum">0</span><span class="l">综合评分</span></div>
+          </div>
+          <div class="hero-info">
+            <span class="hero-badge">● 优秀</span>
+            <div class="hero-h">课表质量优于 95% 的人工排课</div>
+            <div class="hero-d">
+              全校 60 个班、2,100 节课已全部排定，<b>无任何硬性冲突</b>。<br>
+              教师课时分布均衡，主课集中在上午，学科分布合理。发现 3 处可进一步优化的细节。
+            </div>
+            <div class="hero-stats">
+              <div class="hs"><div class="k">硬性冲突</div><div class="v ok">0 <small>处</small></div></div>
+              <div class="hs"><div class="k">已排课时</div><div class="v">2,100 <small>/ 2,100</small></div></div>
+              <div class="hs"><div class="k">涉及教师</div><div class="v">152 <small>人</small></div></div>
+              <div class="hs"><div class="k">待优化项</div><div class="v" style="color:var(--warn)">3 <small>处</small></div></div>
+              <div class="hs"><div class="k">求解耗时</div><div class="v">8.4 <small>秒</small></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 六维度 + 问题清单 ===== -->
+        <div class="grid2 mb">
+          <div>
+            <div class="sec-title">◍ 质量维度 <span class="n">虚线为达标基准线</span></div>
+            <div class="card">
+              <div class="dim"><span class="dn">硬性冲突</span>
+                <span class="db"><i style="width:100%;background:#10B981" data-w="100"></i><span class="base" style="left:100%"></span></span>
+                <span class="dv">100</span><span class="dt ok">完美</span></div>
+              <div class="dim"><span class="dn">教师均衡</span>
+                <span class="db"><i style="width:95%;background:#10B981" data-w="95"></i><span class="base" style="left:85%"></span></span>
+                <span class="dv">95</span><span class="dt ok">优秀</span></div>
+              <div class="dim"><span class="dn">主课时段</span>
+                <span class="db"><i style="width:94%;background:#10B981" data-w="94"></i><span class="base" style="left:80%"></span></span>
+                <span class="dv">94</span><span class="dt ok">优秀</span></div>
+              <div class="dim"><span class="dn">资源利用</span>
+                <span class="db"><i style="width:91%;background:#10B981" data-w="91"></i><span class="base" style="left:75%"></span></span>
+                <span class="dv">91</span><span class="dt ok">良好</span></div>
+              <div class="dim"><span class="dn">学科分散</span>
+                <span class="db"><i style="width:89%;background:#10B981" data-w="89"></i><span class="base" style="left:80%"></span></span>
+                <span class="dv">89</span><span class="dt ok">良好</span></div>
+              <div class="dim"><span class="dn">教师空隙</span>
+                <span class="db"><i style="width:87%;background:#F59E0B" data-w="87"></i><span class="base" style="left:90%"></span></span>
+                <span class="dv">87</span><span class="dt warn">尚可</span></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="sec-title">⚠ 需要关注 <span class="n" id="issueCount">3 项</span></div>
+            <div class="card">
+              <div class="issue" id="is1">
+                <span class="ic w">1</span>
+                <div class="w1">
+                  <div class="t">王芳老师课时分布不均</div>
+                  <div class="d">周三 <code>4 节</code>，周五 <code>1 节</code>，日间方差偏高。建议将周三第 6 节英语调至周五。</div>
+                  <div class="acts">
+                    <button class="mini p" onclick="fix('is1')">✦ 一键优化</button>
+                    <button class="mini">查看课表</button>
+                    <button class="mini">忽略</button>
+                  </div>
+                </div>
+              </div>
+              <div class="issue" id="is2">
+                <span class="ic w">2</span>
+                <div class="w1">
+                  <div class="t">初二(7)班 周二下午连排三节主课</div>
+                  <div class="d">下午依次为 <code>数学</code> → <code>物理</code> → <code>化学</code>，单日难度超阈值。建议与上午副课对调一节。</div>
+                  <div class="acts">
+                    <button class="mini p" onclick="fix('is2')">✦ 一键优化</button>
+                    <button class="mini">查看课表</button>
+                    <button class="mini">忽略</button>
+                  </div>
+                </div>
+              </div>
+              <div class="issue" id="is3">
+                <span class="ic i">3</span>
+                <div class="w1">
+                  <div class="t">音乐教室 1 周一全天空闲</div>
+                  <div class="d">利用率 <code>62%</code>，低于其他专用教室。属提示性信息，不影响课表质量。</div>
+                  <div class="acts">
+                    <button class="mini">查看占用</button>
+                    <button class="mini">忽略</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 人工 vs 系统 对比 ===== -->
+        <div class="mb">
+          <div class="sec-title">⇄ 与人工排课基线对比 <span class="n">基线为上学期教务处手工课表</span></div>
+          <div class="card">
+            <div class="cmp">
+              <span class="cn">教师日课时方差</span>
+              <span class="cbars">
+                <span class="cb"><span class="tag">人工</span><span class="track"><i style="width:78%;background:var(--line-strong)"></i></span><span class="num">2.41</span></span>
+                <span class="cb"><span class="tag">系统</span><span class="track"><i style="width:26%;background:#10B981"></i></span><span class="num">0.79</span></span>
+              </span>
+              <span class="win">↓67%</span>
+            </div>
+            <div class="cmp">
+              <span class="cn">教师空隙课总数</span>
+              <span class="cbars">
+                <span class="cb"><span class="tag">人工</span><span class="track"><i style="width:92%;background:var(--line-strong)"></i></span><span class="num">134 节</span></span>
+                <span class="cb"><span class="tag">系统</span><span class="track"><i style="width:25%;background:#10B981"></i></span><span class="num">36 节</span></span>
+              </span>
+              <span class="win">↓73%</span>
+            </div>
+            <div class="cmp">
+              <span class="cn">主课上午占比</span>
+              <span class="cbars">
+                <span class="cb"><span class="tag">人工</span><span class="track"><i style="width:61%;background:var(--line-strong)"></i></span><span class="num">61%</span></span>
+                <span class="cb"><span class="tag">系统</span><span class="track"><i style="width:88%;background:#10B981"></i></span><span class="num">88%</span></span>
+              </span>
+              <span class="win">↑44%</span>
+            </div>
+            <div class="cmp">
+              <span class="cn">同科同日重复</span>
+              <span class="cbars">
+                <span class="cb"><span class="tag">人工</span><span class="track"><i style="width:70%;background:var(--line-strong)"></i></span><span class="num">47 次</span></span>
+                <span class="cb"><span class="tag">系统</span><span class="track"><i style="width:4%;background:#10B981"></i></span><span class="num">2 次</span></span>
+              </span>
+              <span class="win">↓96%</span>
+            </div>
+            <div class="cmp">
+              <span class="cn">编排耗时</span>
+              <span class="cbars">
+                <span class="cb"><span class="tag">人工</span><span class="track"><i style="width:100%;background:var(--line-strong)"></i></span><span class="num">约 14 天</span></span>
+                <span class="cb"><span class="tag">系统</span><span class="track"><i style="width:1%;background:#10B981"></i></span><span class="num">8.4 秒</span></span>
+              </span>
+              <span class="win">↓99.9%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 图表 ===== -->
+        <div class="grid2">
+          <div>
+            <div class="sec-title">▥ 教师日课时分布 <span class="n">全校 152 名教师抽样 14 名</span></div>
+            <div class="card">
+              <div class="chart" id="chart">
+                <div class="bar-col"><span class="bn">4.2</span><span class="b" style="height:52%"></span><span class="bl">张明</span></div>
+                <div class="bar-col"><span class="bn">4.0</span><span class="b" style="height:50%"></span><span class="bl">李红</span></div>
+                <div class="bar-col"><span class="bn">5.1</span><span class="b hot" style="height:64%"></span><span class="bl">王芳</span></div>
+                <div class="bar-col"><span class="bn">3.8</span><span class="b" style="height:47%"></span><span class="bl">刘伟</span></div>
+                <div class="bar-col"><span class="bn">4.1</span><span class="b" style="height:51%"></span><span class="bl">陈静</span></div>
+                <div class="bar-col"><span class="bn">3.9</span><span class="b" style="height:49%"></span><span class="bl">孙磊</span></div>
+                <div class="bar-col"><span class="bn">4.3</span><span class="b" style="height:54%"></span><span class="bl">周涛</span></div>
+                <div class="bar-col"><span class="bn">4.0</span><span class="b" style="height:50%"></span><span class="bl">赵刚</span></div>
+                <div class="bar-col"><span class="bn">4.4</span><span class="b" style="height:55%"></span><span class="bl">吴敏</span></div>
+                <div class="bar-col"><span class="bn">2.6</span><span class="b cold" style="height:33%"></span><span class="bl">郑丽</span></div>
+                <div class="bar-col"><span class="bn">2.8</span><span class="b cold" style="height:35%"></span><span class="bl">钱强</span></div>
+                <div class="bar-col"><span class="bn">4.2</span><span class="b" style="height:52%"></span><span class="bl">冯磊</span></div>
+                <div class="bar-col"><span class="bn">4.1</span><span class="b" style="height:51%"></span><span class="bl">卫东</span></div>
+                <div class="bar-col"><span class="bn">3.9</span><span class="b" style="height:49%"></span><span class="bl">蒋雯</span></div>
+              </div>
+              <div class="chart-legend">
+                <span><i style="background:var(--brand)"></i>正常（3–5 节/日）</span>
+                <span><i style="background:var(--warn)"></i>偏高</span>
+                <span><i style="background:var(--line-strong)"></i>偏低（艺体科）</span>
+                <span style="margin-left:auto">全校均值 <b style="color:var(--text)">4.02</b> 节/日 · 标准差 <b style="color:var(--ok)">0.79</b></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="sec-title">▦ 主课时段热力图 <span class="n">语数外在各时段的分布密度</span></div>
+            <div class="card">
+              <div class="heat" id="heat">
+                <div></div>
+                <div class="hh">周一</div><div class="hh">周二</div><div class="hh">周三</div><div class="hh">周四</div><div class="hh">周五</div>
+              </div>
+              <div class="chart-legend">
+                <span>颜色越深表示主课越集中</span>
+                <span style="margin-left:auto">上午主课占比 <b style="color:var(--ok)">88%</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span class="ic2">✓</span>
+  <span id="toastMsg">已优化「王芳老师课时分布」</span>
+  <span>评分 <span class="sc" id="toastScore">92.4 → 93.8 ▲</span></span>
+</div>
+
+<div class="demo-bar">
+  <b>视觉稿演示：</b>
+  <span>点击问题清单里的 <b>「✦ 一键优化」</b> 查看局部重排效果</span>
+  <span class="k">·</span>
+  <span>右上角 <b>◐</b> 切换深色模式</span>
+  <div class="spacer" style="flex:1"></div>
+  <button class="btn" onclick="location.href='timetable.html'">← 返回课表页</button>
+</div>
+
+<script>
+document.getElementById('themeBtn').onclick=()=>{
+  const h=document.documentElement;
+  h.dataset.theme = h.dataset.theme==='dark'?'light':'dark';
+};
+
+/* 入场：评分环 + 数字滚动 */
+let SCORE = 92.4;
+function renderRing(v){
+  const C = 2*Math.PI*56;
+  document.getElementById('ring').style.strokeDashoffset = C*(1-v/100);
+}
+function countTo(target,dur=1200){
+  const el=document.getElementById('scoreNum'); const t0=performance.now();
+  (function step(t){
+    const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+    el.textContent=(target*e).toFixed(1);
+    if(p<1) requestAnimationFrame(step);
+  })(performance.now());
+}
+setTimeout(()=>{ renderRing(SCORE); countTo(SCORE); }, 180);
+
+/* 维度条入场 */
+window.addEventListener('load',()=>{
+  document.querySelectorAll('.dim .db i').forEach((el,i)=>{
+    const w=el.dataset.w; el.style.width='0';
+    setTimeout(()=>el.style.width=w+'%', 220+i*70);
+  });
+});
+
+/* 热力图生成 */
+(function(){
+  const heat=document.getElementById('heat');
+  const rows=[['第1节',[95,92,88,94,90]],['第2节',[90,96,93,89,95]],['第3节',[85,88,90,92,86]],
+              ['第4节',[70,66,72,68,74]],['午休',null],
+              ['第5节',[28,32,25,30,27]],['第6节',[18,15,22,17,20]],['第7节',[8,12,6,10,9]]];
+  rows.forEach(([label,vals])=>{
+    const rh=document.createElement('div'); rh.className='rh'; rh.textContent=label; heat.appendChild(rh);
+    if(!vals){
+      const c=document.createElement('div'); c.className='hc lunch'; c.style.gridColumn='span 5';
+      c.textContent='午休'; heat.appendChild(c); return;
+    }
+    vals.forEach(v=>{
+      const c=document.createElement('div'); c.className='hc';
+      const a=0.10+(v/100)*0.85;
+      c.style.background=`rgba(79,70,229,${a})`;
+      if(v<35) c.style.color='var(--text-2)';
+      c.textContent=v+'%'; c.title=label+' 主课密度 '+v+'%';
+      heat.appendChild(c);
+    });
+  });
+})();
+
+/* 一键优化 */
+let fixed=0;
+function fix(id){
+  const el=document.getElementById(id);
+  if(el.classList.contains('done')) return;
+  el.classList.add('done');
+  el.querySelector('.ic').className='ic d';
+  el.querySelector('.ic').textContent='✓';
+  el.querySelectorAll('.mini').forEach(b=>b.disabled=true);
+  el.querySelector('.mini.p').textContent='✓ 已优化';
+  fixed++;
+  const left=3-fixed;
+  document.getElementById('issueCount').textContent = left>0? left+' 项' : '全部已处理';
+  const from=SCORE.toFixed(1); SCORE=Math.min(99.9,SCORE+1.4); renderRing(SCORE); countTo(SCORE,600);
+  document.getElementById('toastMsg').textContent='已优化「'+el.querySelector('.t').textContent+'」';
+  document.getElementById('toastScore').textContent=from+' → '+SCORE.toFixed(1)+' ▲';
+  showToast();
+}
+function fixAll(){ ['is1','is2'].forEach((id,i)=>setTimeout(()=>fix(id), i*900)); }
+let tm;
+function showToast(){
+  const t=document.getElementById('toast'); t.classList.add('show');
+  clearTimeout(tm); tm=setTimeout(()=>t.classList.remove('show'),3400);
+}
+</script>
+</body>
+</html>
