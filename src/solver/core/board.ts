@@ -73,8 +73,11 @@ export class Board {
 
   /** 在给定窗口上挑一个可用场地；返回 null 表示这节课不占场地资源 */
   private pickRoom(u: Unit, slotIds: number[]): { ok: boolean; roomId: number | null } {
-    const options =
-      u.roomOptions.length > 0
+    // ★ 需专用教室的课（H6）只认候选清单，**绝不回退到班级固定教室**：
+    //   回退会让"实验课排进普通教室"这种错误静悄悄地通过。
+    const options = u.needRoom
+      ? u.roomOptions
+      : u.roomOptions.length > 0
         ? u.roomOptions
         : u.homeRoomId != null
           ? [{ roomId: u.homeRoomId, slotsTaken: 1, priority: 0 }]

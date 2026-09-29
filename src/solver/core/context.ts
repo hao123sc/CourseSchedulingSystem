@@ -310,7 +310,10 @@ export function buildContext(input: SolverInput): SolverContext {
       roomOptions = [hit ?? { roomId: fixedRoom, slotsTaken: 1, priority: 0 }]
     }
 
-    const homeRoomId = classIds.length === 1 ? (classById.get(classIds[0])?.homeRoomId ?? null) : null
+    // 固定教室指向一间不存在/已停用的教室时按"没有固定教室"处理，
+    // 否则这个班的每节课都会因为找不到场地而排不出来
+    const rawHome = classIds.length === 1 ? (classById.get(classIds[0])?.homeRoomId ?? null) : null
+    const homeRoomId = rawHome != null && roomIdx.has(rawHome) ? rawHome : null
     const studentCount = classIds.reduce((s, c) => s + (classById.get(c)?.studentCount ?? 0), 0)
 
     pushUnit({
