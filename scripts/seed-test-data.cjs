@@ -116,6 +116,52 @@ function ensureSportsField(db) {
   return Number(info.lastInsertRowid)
 }
 
+// 生成确定性且互不相同的教师姓名：20 姓 × 10 名，i=0..199 的 (i%20, ⌊i/20⌋) 组合唯一
+const SURNAMES = '王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗'.split('')
+const GIVEN = '伟芳娜秀英敏静丽强磊'.split('')
+function teacherName(i) {
+  return SURNAMES[i % SURNAMES.length] + GIVEN[Math.floor(i / SURNAMES.length) % GIVEN.length]
+}
+
+/**
+ * 补 200 名教师（幂等：按 staff_no T001..T200 去重，存在则更新姓名与任教学科）。
+ * 每位教师按轮转分配 1 门任教学科，覆盖全部内置学科，方便后续排课测试。
+ */
+function seedTeachers(db, count) {
+  const subjectIds = db
+    .prepare('SELECT id FROM subject ORDER BY sort_order, id')
+    .all()
+    .map((r) => r.id)
+  const findByStaff = db.prepare('SELECT id FROM teacher WHERE staff_no = ?')
+  const insTeacher = db.prepare(
+    `INSERT INTO teacher (name, staff_no, max_weekly_periods, building, enabled)
+     VALUES (?, ?, 18, ?, 1)`
+  )
+  const updTeacher = db.prepare('UPDATE teacher SET name=?, building=? WHERE id=?')
+  const delLinks = db.prepare('DELETE FROM teacher_subject WHERE teacher_id=?')
+  const insLink = db.prepare(
+    'INSERT OR IGNORE INTO teacher_subject (teacher_id, subject_id) VALUES (?, ?)'
+  )
+  let created = 0
+  for (let i = 0; i < count; i++) {
+    const staffNo = `T${String(i + 1).padStart(3, '0')}`
+    const name = teacherName(i)
+    const building = i % 2 === 0 ? '教学楼A' : '教学楼B'
+    const existing = findByStaff.get(staffNo)
+    let teacherId
+    if (existing) {
+      updTeacher.run(name, building, existing.id)
+      teacherId = existing.id
+    } else {
+      teacherId = Number(insTeacher.run(name, staffNo, building).lastInsertRowid)
+      created++
+    }
+    delLinks.run(teacherId)
+    if (subjectIds.length) insLink.run(teacherId, subjectIds[i % subjectIds.length])
+  }
+  return created
+}
+
 function main() {
   const dbPath = getDbPath()
   const db = new Database(dbPath)
@@ -148,21 +194,40 @@ function main() {
     const insClass = db.prepare(
       'INSERT INTO klass (grade_id, name, short_name, student_count, is_virtual, sort_order) VALUES (?, ?, ?, ?, 0, ?)'
     )
+    // 每班一间专属普通教室（作为班级固定教室 home_room）
+    const delRoomByName = db.prepare('DELETE FROM classroom WHERE name = ?')
+    const insRoom = db.prepare(
+      `INSERT INTO classroom (name, room_type, capacity, concurrent_capacity, building, enabled)
+       VALUES (?, 'normal', 50, 1, ?, 1)`
+    )
+    const setHomeRoom = db.prepare('UPDATE klass SET home_room_id = ? WHERE id = ?')
+
     let classCount = 0
+    let roomCount = 0
     grades.forEach((g, gi) => {
       const stageId = stageIdByCode(db, g.code)
       const gradeId = Number(insGrade.run(sem1, stageId, g.name, gi + 1).lastInsertRowid)
+      const building = g.code === 'senior' ? '高中部' : '初中部'
       for (let i = 1; i <= CLASSES_PER_GRADE; i++) {
-        insClass.run(gradeId, `${g.name}(${i})班`, `${i}班`, STUDENTS, i)
+        const className = `${g.name}(${i})班`
+        const classId = Number(
+          insClass.run(gradeId, className, `${i}班`, STUDENTS, i).lastInsertRowid
+        )
+        // 幂等：先删同名普通教室再建，避免重复运行堆积
+        delRoomByName.run(className)
+        const roomId = Number(insRoom.run(className, building).lastInsertRowid)
+        setHomeRoom.run(roomId, classId)
         classCount++
+        roomCount++
       }
     })
 
     ensureSportsField(db)
-    return { sem1, classCount }
+    const teacherCreated = seedTeachers(db, 200)
+    return { sem1, classCount, roomCount, teacherCreated }
   })
 
-  const { classCount } = tx()
+  const { classCount, roomCount, teacherCreated } = tx()
 
   // 汇总
   const summary = {
@@ -180,9 +245,14 @@ function main() {
       )
       .all(),
     totalClasses: classCount,
+    totalRooms: roomCount,
     sportsField: db
       .prepare("SELECT name, capacity, concurrent_capacity FROM classroom WHERE name='田径场'")
-      .get()
+      .get(),
+    teacherTotal: db.prepare('SELECT COUNT(*) AS c FROM teacher').get().c,
+    withHomeRoom: db.prepare('SELECT COUNT(*) AS c FROM klass WHERE home_room_id IS NOT NULL').get()
+      .c,
+    normalRooms: db.prepare("SELECT COUNT(*) AS c FROM classroom WHERE room_type='normal'").get().c
   }
   db.close()
 
@@ -194,7 +264,11 @@ function main() {
   }
   console.log('年级/班级（当前学期）：')
   for (const g of summary.grades) console.log(`  - ${g.grade}: ${g.classes} 班`)
-  console.log(`共 ${summary.totalClasses} 个班，每班 ${45} 人`)
+  console.log(
+    `共 ${summary.totalClasses} 个班，每班 ${45} 人；已配固定教室 ${summary.withHomeRoom} 个班`
+  )
+  console.log(`教师：共 ${summary.teacherTotal} 名（本次新增 ${teacherCreated} 名）`)
+  console.log(`教室：普通教室 ${summary.normalRooms} 间 + 田径场 1 个`)
   console.log(
     `体育场地：${summary.sportsField.name}  座位${summary.sportsField.capacity}  最多 ${summary.sportsField.concurrent_capacity} 个班同时上`
   )
