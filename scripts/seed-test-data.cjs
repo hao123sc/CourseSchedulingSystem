@@ -20,9 +20,16 @@ const fs = require('fs')
 const { app } = require('electron')
 const Database = require('better-sqlite3')
 
+// 项目根目录：本脚本位于 <root>/scripts/ 下，向上一级即根目录。
+// 注意：用 `electron scripts/xxx.cjs` 运行时 app.getAppPath() 会指向 scripts 目录，
+// 所以路径一律以 __dirname 为基准，避免解析到错误位置（也确保命中 app 真正使用的那个 DB）。
+const PROJECT_ROOT = path.resolve(__dirname, '..')
+
 function getDbPath() {
-  // 与 src/main/db/connection.ts 完全一致：dev 用仓库内 .local-data/data.db
-  const dir = app.isPackaged ? app.getPath('userData') : path.join(app.getAppPath(), '.local-data')
+  // 与 src/main/db/connection.ts 的 dev 分支一致：仓库根目录下 .local-data/data.db
+  // 可用环境变量 ZHIKEPAI_DB 显式覆盖 DB 路径。
+  if (process.env.ZHIKEPAI_DB) return process.env.ZHIKEPAI_DB
+  const dir = app.isPackaged ? app.getPath('userData') : path.join(PROJECT_ROOT, '.local-data')
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return path.join(dir, 'data.db')
 }
@@ -45,7 +52,7 @@ function runMigrations(db) {
       .map((r) => r.version)
   )
   const record = db.prepare('INSERT INTO schema_version (version) VALUES (?)')
-  const dir = path.join(app.getAppPath(), 'src', 'main', 'db', 'migrations')
+  const dir = path.join(PROJECT_ROOT, 'src', 'main', 'db', 'migrations')
   for (const m of MIGRATIONS) {
     if (applied.has(m.version)) continue
     const sql = fs.readFileSync(path.join(dir, m.file), 'utf-8')
