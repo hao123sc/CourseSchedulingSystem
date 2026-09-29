@@ -5,9 +5,35 @@
  * preload 与 main 两端都以此为唯一事实来源，禁止裸用 `ipcRenderer.invoke('xxx')` 字符串。
  *
  * M0 阶段只落地了骨架自检所需的通道（system:*、healthCheck:*），
- * 其余域（grade / matrix / rule / schedule / timetable / report / export / seed ...）
- * 将随 M1~M7 逐步补齐，先在此列出接口占位以固定命名规范。
+ * M1 补齐基础数据域（school / semester / stage / timeSlot / grade / class /
+ * subject / teacher / classroom / weightProfile / excel），
+ * 其余域（matrix / rule / schedule / timetable / report ...）随 M2~M7 逐步补齐。
  */
+
+import type {
+  Classroom,
+  ClassroomInput,
+  ClassBatchInput,
+  ExcelExportResult,
+  ExcelImportResult,
+  Grade,
+  GradeInput,
+  Klass,
+  KlassInput,
+  PeriodTemplate,
+  School,
+  SchoolInput,
+  Semester,
+  SemesterInput,
+  Stage,
+  StageInput,
+  Subject,
+  SubjectInput,
+  Teacher,
+  TeacherInput,
+  TimeSlot,
+  WeightProfile
+} from './entities'
 
 /** M0：系统自检，验证主进程存活与版本信息可读 */
 export interface SystemPingResult {
@@ -36,10 +62,58 @@ export interface IpcApi {
   'healthCheck:list': () => HealthCheckRow[]
   'healthCheck:insert': (message: string) => HealthCheckRow
 
-  // ---- 基础数据（M1 占位，尚未实现） ----
-  // 'grade:list': (semesterId: number) => Grade[]
-  // 'grade:upsert': (payload: GradeInput) => Grade
-  // 'class:batchCreate': (p: { gradeId: number; count: number; namePattern: string }) => Klass[]
+  // ---- 学校 / 学期（M1） ----
+  'school:get': () => School | null
+  'school:save': (payload: SchoolInput) => School
+  'semester:list': () => Semester[]
+  'semester:getCurrent': () => Semester | null
+  'semester:upsert': (payload: SemesterInput) => Semester
+  'semester:delete': (id: number) => void
+  'semester:setCurrent': (id: number) => void
+
+  // ---- 学段 / 作息（M1） ----
+  'stage:list': () => Stage[]
+  'stage:upsert': (payload: StageInput) => Stage
+  'stage:delete': (id: number) => void
+  'timeSlot:listByStage': (stageId: number) => TimeSlot[]
+  /** 用整套「节次模板 × 天数」覆盖某学段的全部作息（作息编辑器保存） */
+  'timeSlot:replaceForStage': (stageId: number, periods: PeriodTemplate[]) => TimeSlot[]
+
+  // ---- 年级 / 班级（M1） ----
+  'grade:list': (semesterId: number) => Grade[]
+  'grade:upsert': (payload: GradeInput) => Grade
+  'grade:delete': (id: number) => void
+  'class:listByGrade': (gradeId: number) => Klass[]
+  'class:listBySemester': (semesterId: number) => Klass[]
+  'class:upsert': (payload: KlassInput) => Klass
+  'class:delete': (id: number) => void
+  'class:batchCreate': (payload: ClassBatchInput) => Klass[]
+
+  // ---- 学科（M1） ----
+  'subject:list': () => Subject[]
+  'subject:upsert': (payload: SubjectInput) => Subject
+  'subject:delete': (id: number) => void
+
+  // ---- 教师（M1） ----
+  'teacher:list': () => Teacher[]
+  'teacher:upsert': (payload: TeacherInput) => Teacher
+  'teacher:delete': (id: number) => void
+
+  // ---- 教室（M1） ----
+  'classroom:list': () => Classroom[]
+  'classroom:upsert': (payload: ClassroomInput) => Classroom
+  'classroom:delete': (id: number) => void
+
+  // ---- 风格权重档位（M1，只读） ----
+  'weightProfile:list': () => WeightProfile[]
+
+  // ---- Excel 导入 / 导出（M1；教师 / 班级 / 教室） ----
+  'teacher:exportExcel': () => ExcelExportResult
+  'teacher:importExcel': () => ExcelImportResult
+  'class:exportExcel': (semesterId: number) => ExcelExportResult
+  'class:importExcel': (semesterId: number) => ExcelImportResult
+  'classroom:exportExcel': () => ExcelExportResult
+  'classroom:importExcel': () => ExcelImportResult
 
   // ---- 教学任务 / 规则（M2 占位） ----
   // 'matrix:get': (semesterId: number) => TeachingMatrix
