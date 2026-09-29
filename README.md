@@ -30,7 +30,10 @@
 
 ## 开发状态
 
-✅ **M0 · 工程骨架**：已完成并通过 Win11 真机验收（`npm run dev` 正常弹窗、DB 读写正常、`npm run build:win` 成功出 exe）。当前进入 **M1 · 数据层与基础数据**。详见 [`PROGRESS.md`](PROGRESS.md)。
+✅ **M0 · 工程骨架**：已通过 Win11 真机验收（`npm run dev` 正常弹窗、DB 读写正常、`npm run build:win` 成功出 exe）。
+✅ **M1 · 数据层与基础数据**：建库迁移 + 学段作息/年级班级/学科/教师/教室 CRUD + Excel 导入导出。
+✅ **M2 · 教学任务与规则**：教学任务矩阵（Excel 式键盘操作）+ 课时方案一键套用 + 教师指派与工作量看板 + 四层时段规则网格 + 学科规则 + 预排锁定 + 约束组 + `SolverInput` 组装与自检。
+⏭️ 下一步 **M3 · 排课引擎 v1**。详见 [`PROGRESS.md`](PROGRESS.md)。
 
 ## 本地开发 / 打包（首次务必在有完整外网的机器上执行）
 
@@ -50,13 +53,22 @@ npm install
 npm run dev
 
 # 3. 单测 / 类型检查 / 代码规范（沙箱内已跑通，本地应同样全绿）
-npm run test
+npm run test          # 数据层集成测试需要 better-sqlite3 原生模块，装不上时会自动 skip
+npm run test:sqlite   # 兜底：把 sqlite 驱动临时换成 Node 内置 node:sqlite（需 Node >= 22.5），
+                      # 让上面被 skip 的数据层测试也真实跑起来；产品代码不受影响
 npm run typecheck
 npm run lint
 
 # 4. 打正式包（任选其一，与你本机操作系统一致最省事）
 npm run build:win     # Windows 机器上：产出 release-builds/ 下的 portable + Setup 两个 exe
 npm run build:linux   # Linux 机器上：产出 AppImage / 目录版
+```
+
+```bash
+# 5. 一键铺演示数据（示范高完中：初中部 + 高中部各 3 年级 × 20 班）
+npm run seed:test     # 只铺基础数据：学段作息 / 年级班级 / 学科 / 教师 / 教室 / 班主任
+npm run seed:m2       # 在此之上补齐教学任务 / 时段规则 / 学科规则 / 预排锁定 / 约束组
+#    两个脚本都幂等，可重复执行；基础数据共用 scripts/lib/demo-school.cjs 一份定义
 ```
 
 **关于 Windows exe**：`electron-builder` 在打 Windows 包时会用 `rcedit` 给 exe 写图标/版本信息；
