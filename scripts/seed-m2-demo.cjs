@@ -22,7 +22,15 @@
  * 幂等：可反复运行得到一致结果。⚠️ 会清空当前学期的年级与规则并重建，
  *       且把 school 单例改写为「示范高完中」、停用小学学段。
  */
-const { app } = require('electron')
+// 正式用法是 `npm run seed:test` / `npm run seed:m2`（由 electron 启动，匹配原生 ABI）。
+// 但只要显式指定了 ZHIKEPAI_DB，就允许在纯 Node 下直跑——供沙箱/CI 校验种子逻辑用，
+// 详见 docs/08 §8。此时不依赖 electron，也就不需要下载 Electron 运行时。
+let app = null
+try {
+  ;({ app } = require('electron'))
+} catch (err) {
+  if (!process.env.ZHIKEPAI_DB) throw err
+}
 const Database = require('better-sqlite3')
 const base = require('./lib/demo-school.cjs')
 

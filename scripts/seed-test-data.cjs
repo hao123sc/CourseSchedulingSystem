@@ -22,7 +22,15 @@
  * 幂等：可反复运行得到一致结果。⚠️ 会清空当前学期的年级并把 school 单例改写为「示范高完中」。
  * 基础数据的唯一定义在 scripts/lib/demo-school.cjs，与 seed:m2 共用，不会跑偏。
  */
-const { app } = require('electron')
+// 正式用法是 `npm run seed:test` / `npm run seed:m2`（由 electron 启动，匹配原生 ABI）。
+// 但只要显式指定了 ZHIKEPAI_DB，就允许在纯 Node 下直跑——供沙箱/CI 校验种子逻辑用，
+// 详见 docs/08 §8。此时不依赖 electron，也就不需要下载 Electron 运行时。
+let app = null
+try {
+  ;({ app } = require('electron'))
+} catch (err) {
+  if (!process.env.ZHIKEPAI_DB) throw err
+}
 const Database = require('better-sqlite3')
 const base = require('./lib/demo-school.cjs')
 
@@ -33,7 +41,17 @@ function main() {
   db.pragma('foreign_keys = ON')
   base.runMigrations(db)
 
-  const out = db.transaction(() => base.buildBaseSchool(db))()
+  const out = db.transaction(() => {
+    const built = base.buildBaseSchool(db)
+    // 本脚本代表「M1 基础数据层」，因此要把 M2 层（seed:m2 铺的规则类数据）一并清掉，
+    // 否则先跑 seed:m2 再跑 seed:test 会留下一堆指向已删年级/班级的孤儿规则。
+    // 教学任务与班级级预排由 grade/klass 的级联删除带走，这里补的是不挂在年级下的那几张表。
+    db.prepare('DELETE FROM time_rule WHERE semester_id = ?').run(built.semesterId)
+    db.prepare('DELETE FROM fixed_lesson WHERE semester_id = ?').run(built.semesterId)
+    db.prepare('DELETE FROM constraint_group WHERE semester_id = ?').run(built.semesterId)
+    db.prepare('DELETE FROM subject_classroom').run()
+    return built
+  })()
 
   const q = (sql, ...a) => db.prepare(sql).get(...a)
   const summary = {

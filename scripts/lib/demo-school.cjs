@@ -30,6 +30,7 @@ const MIGRATIONS = [
 /** 与 src/main/db/connection.ts 的 dev 分支一致：仓库根目录下 .local-data/data.db */
 function getDbPath(app) {
   if (process.env.ZHIKEPAI_DB) return process.env.ZHIKEPAI_DB
+  if (!app) throw new Error('未在 electron 下运行时必须通过环境变量 ZHIKEPAI_DB 指定数据库路径')
   const dir = app.isPackaged ? app.getPath('userData') : path.join(PROJECT_ROOT, '.local-data')
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return path.join(dir, 'data.db')
