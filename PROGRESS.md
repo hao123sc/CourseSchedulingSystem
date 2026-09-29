@@ -2,7 +2,7 @@
 
 > **本文件是项目状态的唯一事实来源（Single Source of Truth）。**
 > 每个会话开始时必须先读本文件；每个会话结束前必须更新本文件并提交。
-> 最后更新：2026-09-29 · **M2 教学任务与规则已完成**（教学任务矩阵 + 四层规则网格 + 学科规则 + 预排锁定 + 约束组 + SolverInput 组装与自检 + `npm run seed:m2` 示范初中验收数据）。沙箱侧：typecheck/lint/build/prettier 全绿，单测 49 条纯逻辑用例通过；迁移 005、5 个 Repository 的真实 SQL、种子脚本与 `validateSolverInput` 均经真实 SQLite 引擎跑通（见变更日志 #6 的验证手法）。Electron 起窗口与 UI 手测留待用户真机。分支 tip `ca39759`
+> 最后更新：2026-09-29 · **M2 教学任务与规则已完成**（教学任务矩阵 + 四层规则网格 + 学科规则 + 预排锁定 + 约束组 + SolverInput 组装与自检 + `npm run seed:m2` **示范高完中**验收数据）。沙箱侧：typecheck/lint/build/prettier 全绿，单测 49 条纯逻辑用例通过；迁移 005、5 个 Repository 的真实 SQL、种子脚本与 `validateSolverInput` 均经真实 SQLite 引擎跑通（见变更日志 #6 的验证手法）。Electron 起窗口与 UI 手测留待用户真机。分支 tip `待补`
 
 ---
 
@@ -26,7 +26,7 @@
 | 设计阶段 | ✅ 完成 | 2026-09-28 | 8 份文档 + 3 份视觉稿 |
 | **M0 · 工程骨架** | ✅ 完成 | 2026-09-28 | 用户在 Win11 真机验证：`npm run dev` 弹窗正常、工作台读写测试行正常、`npm run build:win` 成功出 exe。沙箱侧验证记录见六、变更日志 #2/#3 |
 | **M1 · 数据层与基础数据** | ✅ 完成 | 2026-09-29 | 全量 DDL（`001_init.sql`，逐字取自 docs/03 §3）+ 迁移执行器 + 内置种子（3 学段/默认作息、19 学科含配色、3 档权重）+ 9 个 Repository + 全部 IPC + 页面（学校设置/学段作息/年级班级含批量生成 20 班/学科/教师/教室）+ 通用 `EntityTable` + 教师/班级/教室 Excel 导入导出（exceljs）。沙箱验证见变更日志 #4；Electron 起窗口/真机手测留待用户 |
-| **M2 · 教学任务与规则** | ✅ 完成 | 2026-09-29 | 迁移 `005_m2_rules.sql`（含 `ux_time_rule_global` 条件唯一索引）+ 5 个 Repository + 三组 IPC（teaching/rules/solver）+ `MatrixEditor`（Excel 式键盘 + 框选批量填充 + 行列合计超额标黄）+ 课时方案一键套用（内置 8 套，按国标推算，可预览改数字）+ 教师指派器与工作量看板 + `RuleGrid` 四层规则拖刷 + 学科规则 + 预排锁定 + 约束组 CRUD + `SolverInput` 纯类型/组装器/自检。验收数据 `npm run seed:m2`。沙箱验证见变更日志 #6；Electron 起窗口与 UI 手测留待用户 |
+| **M2 · 教学任务与规则** | ✅ 完成 | 2026-09-29 | 迁移 `005_m2_rules.sql`（含 `ux_time_rule_global` 条件唯一索引）+ 5 个 Repository + 三组 IPC（teaching/rules/solver）+ `MatrixEditor`（Excel 式键盘 + 框选批量填充 + 行列合计超额标黄）+ 课时方案一键套用（内置 8 套，按国标推算，可预览改数字）+ 教师指派器与工作量看板 + `RuleGrid` 四层规则拖刷 + 学科规则 + 预排锁定 + 约束组 CRUD + `SolverInput` 纯类型/组装器/自检。验收数据 `npm run seed:m2`（**示范高完中**：初中 3 年级 + 高中 3 年级各 20 班 = 120 班，两套作息同时在跑）。沙箱验证见变更日志 #6/#7；Electron 起窗口与 UI 手测留待用户 |
 | M3 · 排课引擎 v1（无冲突） | ⬜ 未开始 | | |
 | M4 · 课表展示 | ⬜ 未开始 | | 视觉稿已定稿，照 `docs/mockups/` 实现 |
 | M5 · 引擎 v2（质量优化） | ⬜ 未开始 | | |
@@ -79,6 +79,7 @@
 | 🟡 中 | 范围蔓延 | M9 全部选做；M1~M8 完成即可交付 |
 | 🟡 中（新增 2026-09-29） | **`validateSolverInput` 的"容量估算"只是粗筛，不等于有解**。它只验证「班级需求节次 ≤ 可用时段」这类一维必要条件，不考虑教师/场地交叉耦合，因此 `ok=true` 仍可能排不出课 | M3 引擎必须自带真正的可行性判定与冲突归因；自检页的绿灯文案已写明"只是必要条件"，M3 起把引擎的不可行原因回填到同一张报告上 |
 | 🟡 中（新增 2026-09-29） | **规则数据量随作用域爆炸**：240 班 × 40 槽 = 9600 行/班级层，四层叠加后单学期可达数万行 | 已做两道防线：① `NORMAL` 视为"无规则"直接删行不落库；② 005 迁移补了 `ix_time_rule_lookup`/`ux_time_rule_global` 索引。M3 组装 `SolverInput` 时按 slot 建索引（`indexRulesBySlot`）一次性摊平，引擎内不得再做线性扫描 |
+| 🟡 中（新增 2026-09-29） | **高完中是两套作息并行**：初中 40 槽/周、高中 65 槽/周（含 5 格早读 + 15 格晚自习），同一学期里两组 `time_slot` 并存 | 凡是按「星期 × 节次」建位图/数组的地方，**必须按 stage 分桶**，不能用一个全局 `dayOfWeek*periodsPerDay+period` 索引；`SolverStage.slotIds` 已经按学段给好了各自的时段全集，M3 直接用它切分搜索空间 |
 | 🟢 已澄清（2026-09-29） | 曾怀疑 `xxxRepo.upsert` 的 `.run({ ...params, id })` 给 UPDATE 传了多余的命名参数（`semesterId` 未出现在 SET 子句里）会报错 | 查 `better-sqlite3` C++ 源码（`binder.lzz` → `better_sqlite3.cpp`）确认：它只遍历 SQL 里出现的占位符取值，**多余的对象 key 会被忽略**，仅缺失时才抛 `Missing named parameter`。故现有写法安全，**不要"顺手修"**。注意 Node 内置 `node:sqlite` 在这点上更严格，拿它做验证脚手架时需自行过滤 key |
 
 **易错点**：
@@ -100,6 +101,7 @@
 | 2026-09-29 | #5 | **M1 收尾增强（非里程碑新增功能，用户临时追加）**。① 测试数据脚本 `scripts/seed-test-data.cjs` + `npm run seed:test`（幂等；xxx中学/完全中学/6 年级×20 班=120 班每班 45 人/田径场并发 5/200 名教师 T001–T200 各配 1 学科/每班一间同名专属普通教室并设为固定教室 home_room/为 120 个班各指定一名班主任 T001.. 依次一师一班）。修过一个路径 bug（改用 `__dirname` 定位项目根，避免 `electron scripts/xx.cjs` 直跑时 `app.getAppPath()` 解析到 `scripts/` 导致 ENOENT）。② UI：`GradeClassTab` 班级编辑弹窗新增「班主任」下拉；修复编辑班级时因未回传 `homeRoomId` 导致固定教室被 upsert 清空的 bug（现表单初始化并回传 `homeRoomId`/`headTeacherId`）；表格新增班主任列。③ `EntityTable` 新增通用 `bulkActions` 渲染插槽（选中行后触发自定义批量操作），年级班级页据此支持「批量指定/清除班主任」。全部经 typecheck/lint/build/prettier 校验；种子逻辑经 Python sqlite3 跑真实迁移验证（120 班全部分配不同班主任、FK 无异常、重复运行加量为 0）。分支 tip `1caa1b9` |
 | 2026-09-29 | #4 | **M1 数据层与基础数据完成**。① 先发现本会话分支派生自纯文档提交、不含 M0 代码，M0 在同级分支 `arena/01a0e87b`（`d4102d6`）——用 `git merge --ff-only` 快进并入 M0，未切换分支。② `migrations/001_init.sql` 全量建表（**逐字取自 docs/03 §3**）；`002~004` 种子（三学段+默认作息、19 学科含配色、3 档 S1~S15 权重取自 docs/04 §1.3）；`migrate.ts` 迁移器（`schema_version` 记录、逐迁移单事务、`?raw` 把 SQL 内联进主进程产物）。③ 9 个 Repository + 全部 IPC（通道类型均声明于 `shared/types/ipc.ts`）。④ 页面：学校设置 / 学段与作息编辑器 / 年级班级（批量生成 20 班+命名模板预览）/ 学科（配色）/ 教师（任教学科多选）/ 教室（双容量）；通用 `EntityTable`（排序/搜索/分页/批量删除）；教师/班级/教室 Excel 导入导出（新增依赖 **exceljs**，已获用户同意）；toast/modal UI 基元。⑤ 已确认设计细节：初中默认作息=上午5+下午3=8 节/天、5 天制（docs 只给了小学 7、高中 13，初中空白，经用户确认）。**沙箱验证**：typecheck/lint/build 全绿；DDL+种子经真实 SQLite 引擎（Python sqlite3）校验、`?raw` SQL 确认已打进 `out/main/index.js`；新增 `repositories.test.ts` 覆盖迁移+种子+全 Repository（含 3 年级×20 班），因沙箱无法编译 better-sqlite3 原生模块而 `describe.skipIf` 跳过，**在有原生模块的机器/CI 会实际运行**。Electron 起窗口与真机手测留给用户 |
 | 2026-09-29 | #6 | **M2 教学任务与规则完成**。① 数据层：迁移 `005_m2_rules.sql`（查询索引 + 条件唯一索引 `ux_time_rule_global`，修掉原 `ux_time_rule` 因 `scope_id` 可空导致 global 规则可重复插入的洞）；5 个 Repository（`teachingTask`/`timeRule`/`fixedLesson`/`subjectRule`/`constraintGroup`）；`solverInputService` 组装 `SolverInput` 快照 + `checkSolverInput` 自检；三组 IPC（`teaching:*`/`timeRule:*`/`subjectRule:*`/`fixedLesson:*`/`constraintGroup:*`/`solver:buildInput`）。② 共享层：`shared/curriculumPresets.ts` 内置 8 套课时方案（义务教育课程方案 2022 版推算小学两段与初中三段、普通高中课程方案 2017 年版 2020 修订按必修学分折算），学科按**名称**匹配、匹配不上原样回报不静默丢弃；`shared/constraints/{ruleValue,fixedLesson}.ts` 承载四层规则合并与预排冲突判定（**引擎与渲染端共用的唯一一份**）。③ 引擎侧只落纯类型与纯校验：`solver/model/types.ts` + `validate.ts`（零 Node/Electron 依赖，18 种 issue code），Solution/Assignment 等求解侧建模留给 M3。④ 渲染层：教学任务页（`MatrixEditor` 方向键/Tab/Enter/F2/Ctrl+D 向下填充/Ctrl+C+V 整行复制/Shift+方向框选批量填充、行列合计、行合计超学段周总节次整行标黄；课时方案一键套用可预览改数字；教师指派器只列任教该科教师且超工作量者标红置底；右侧工作量看板实时预警）、排课规则页五个 Tab（`RuleGrid` 拖刷调色 + 五种作用域切换 + 分段分隔 + 已设规则数 + 清空/复制到同学科教师、学科规则、预排锁定、约束组、输入自检）。⑤ 验收数据：`npm run seed:m2`（`scripts/seed-m2-demo.cjs`，幂等）铺出示范初中 60 班 / 121 名教师 / 780 条教学任务 1880 节 / 142 条四层规则 / 63 条预排 / 3 个约束组。**沙箱验证手法（新）**：因无法编译 `better-sqlite3` 原生模块，改用 Node 22 内置 `node:sqlite` 写了一次性脚手架（`/tmp`，已删），**只替换 sqlite 驱动**，直接跑真实的迁移 001~005、真实种子脚本、真实 5 个 Repository、真实 `solverInputService` 与 `validateSolverInput`：repo 断言 41 条全过，种子两次运行计数完全一致（幂等），最终 `validateSolverInput` 返回 `ok=true`、**零 issue**，即"数据可完整读出为 SolverInput"验收达成。过程中借此抓到并修掉 3 个种子脚本真 bug（教师池按整班课时不可拆分重算、不足时就地扩招 → 零未指派任务；连堂改挂在语文；班会占位与初三禁排时段撞格）。typecheck/lint/build/prettier 全绿，`npx vitest run` 49 条纯逻辑用例通过（`connection.test.ts` 因缺原生模块报红、`repositories.test.ts`/`m2Repositories.test.ts` 自动 skip，均为沙箱已知现象）。分支 tip `ca39759` |
+| 2026-09-29 | #7 | **M2 验收基准由「示范初中」改为「示范高完中」（用户修正）**，并同步修文档。① `scripts/seed-m2-demo.cjs` 重写成学段驱动：学校 `school_type='complete'`，初一/初二/初三 + 高一/高二/高三各 20 班 = **120 班**，小学学段停用；初中部/高中部**分开建教师池**（名字前缀 初/高，共 256 人，人人 ≤18 节/周）；课时方案用初中三套 + 高中三套（均去掉「班会」，改由预排占位承担）；**高中作息角色全部从库里的 `segment`+`period_name` 推导**（早读/上午正课/下午正课/晚自习），用户改过作息脚本依然成立，不写死节次编号。② 高中特有建模：每天早读 + 每天 3 节晚自习按**整年级预排占位**（`fixed_lesson.grade_id`）铺满 20 格/周，把高中的可排窗口从 65 格收到 45 格——对 M3 才是有意义的紧约束；早读只留给语文/英语，其余 14 个在用学科在早读时段一律 `FORBIDDEN`。③ 约束组改成跨部案例：教师互斥组一头初中部一头高中部、合班拼合改为高一 19/20 班通用技术。④ 修掉一个连堂 bug（原给 1 节/周的通用技术挂了 1×2 连堂，触发 20 条 `TASK_CONSECUTIVE` error；改成语文 + 高中信息技术，并加 `periods >= 2` 前置判断）。**沙箱验证**（同 #6 的 `node:sqlite` 脚手架，真实种子 + 真实 `solverInputService` + 真实 `validateSolverInput`）：幂等复跑计数一致，`ok=true` **零 issue**，120 班 / 1520 条任务 3900 节 / 373 条规则 / 186 条预排 / 3 个约束组 / 141 间教室；最紧的班——初三 需 34 可用 38、高三 需 57 可用 63，均有余量。⑤ 文档同步：`docs/06` M2 验收与 M8 种子数据、`docs/03 §5` 示例学校表（新增 `complete 示范高完中` 行并把"主演示"移交给它，原三套单学段预设保留为备选）、`docs/00` 演示数据策略（加注 2026-09-29 修订说明，不改写原决策记录）、`docs/05` 首启动画面示例选项、`docs/next-session-M2.md` 验收标准 |
 
 ---
 
@@ -115,10 +117,11 @@ docs/04-排课算法设计.md 与 docs/06-开发计划.md 中 M3 对应章节，
 
 执行 M3 排课引擎 v1（无冲突）。输入已经就绪：主进程 solverInputService
 能把整个学期组装成 SolverInput 快照，src/solver/model/types.ts 是它的纯类型，
-validate.ts 是入口自检；用 npm run seed:m2 可以一键铺出示范初中的验收数据
-（60 班 / 780 条教学任务 / 142 条四层规则 / 63 条预排 / 3 个约束组）。
+validate.ts 是入口自检；用 npm run seed:m2 可以一键铺出**示范高完中**的验收数据
+（初中+高中共 120 班 / 1520 条教学任务 3900 节 / 373 条四层规则 /
+186 条预排占位 / 3 个约束组，两套作息同时在跑）。
 先把 D3 定的 AC-3 预处理 → DSATUR 构造这两段做出来，目标是
-H1~H11 硬约束零违反、能跑完 60 班，软约束优化留给 M5。
+H1~H11 硬约束零违反、**能同时排完初中部与高中部共 120 班**，软约束优化留给 M5。
 ```
 
 > 提醒：
