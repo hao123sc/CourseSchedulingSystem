@@ -167,7 +167,7 @@ function StageEditModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label>名称</Label>
           <Input
@@ -299,8 +299,8 @@ function ScheduleEditModal({
         </>
       }
     >
-      <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-[2fr_1.5fr_1.2fr_1.2fr_auto_auto] items-center gap-2 px-1 text-xs font-medium text-[color:var(--text-secondary)]">
+      <div className="flex flex-col gap-2 overflow-x-auto">
+        <div className="grid min-w-[40rem] grid-cols-[2fr_1.5fr_1.2fr_1.2fr_auto_auto] items-center gap-2 px-1 text-xs font-medium text-[color:var(--text-secondary)]">
           <span>节次名称</span>
           <span>时段</span>
           <span>开始</span>
@@ -311,7 +311,7 @@ function ScheduleEditModal({
         {rows.map((r, i) => (
           <div
             key={i}
-            className="grid grid-cols-[2fr_1.5fr_1.2fr_1.2fr_auto_auto] items-center gap-2"
+            className="grid min-w-[40rem] grid-cols-[2fr_1.5fr_1.2fr_1.2fr_auto_auto] items-center gap-2"
           >
             <Input
               value={r.periodName}

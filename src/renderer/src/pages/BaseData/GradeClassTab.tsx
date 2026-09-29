@@ -106,7 +106,7 @@ export function GradeClassTab(): React.JSX.Element {
   ]
 
   return (
-    <div className="grid grid-cols-[260px_1fr] gap-6">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
       {/* 年级列 */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -354,7 +354,7 @@ function GradeEditModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label>年级名称</Label>
           <Input
@@ -451,7 +451,7 @@ function ClassEditModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label>班级名称</Label>
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -655,7 +655,7 @@ function BatchCreateModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label>生成数量</Label>
           <Input

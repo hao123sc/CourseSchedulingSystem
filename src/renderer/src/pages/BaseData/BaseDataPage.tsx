@@ -18,7 +18,7 @@ export function BaseDataPage(): React.JSX.Element {
   const [tab, setTab] = useState<TabKey>('gradeClass')
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold">基础数据</h1>
         <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
@@ -26,7 +26,7 @@ export function BaseDataPage(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-[color:var(--border-subtle)]">
+      <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--border-subtle)]">
         {TABS.map((t) => (
           <button
             key={t.key}

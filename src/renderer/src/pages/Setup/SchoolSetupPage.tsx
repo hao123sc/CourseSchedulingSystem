@@ -16,7 +16,7 @@ import { StageScheduleManager } from './StageScheduleManager'
 
 export function SchoolSetupPage(): React.JSX.Element {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">学校设置</h1>
         <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
@@ -65,7 +65,7 @@ function SchoolInfoCard(): React.JSX.Element {
         <CardTitle>学校信息</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label>学校名称</Label>
             <Input
@@ -245,7 +245,7 @@ function SemesterEditModal({
             placeholder="如 2026-2027学年第一学期"
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label>开始日期</Label>
             <Input

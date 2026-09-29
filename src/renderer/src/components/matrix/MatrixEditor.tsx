@@ -415,7 +415,7 @@ export function MatrixEditor({
       ref={gridRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="relative max-h-[62vh] overflow-auto rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] outline-none focus:ring-2 focus:ring-brand-600/40"
+      className="relative min-h-[18rem] flex-1 overflow-auto rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] outline-none focus:ring-2 focus:ring-brand-600/40"
     >
       <table className="border-separate border-spacing-0 text-sm" style={{ userSelect: 'none' }}>
         <thead>

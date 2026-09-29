@@ -125,7 +125,7 @@ export function EntityTable<T>({
               setPage(1)
             }}
             placeholder={searchPlaceholder}
-            className="h-9 w-56"
+            className="h-9 w-full max-w-[14rem] sm:w-56"
           />
         )}
         <div className="flex-1" />
@@ -146,9 +146,10 @@ export function EntityTable<T>({
         {toolbar}
       </div>
 
-      <div className="overflow-hidden rounded-card border border-[color:var(--border-subtle)]">
-        <table className="w-full border-collapse text-sm">
-          <thead>
+      {/* 窗口变窄时表格横向滚动，而不是把列挤成一团；表头在纵向滚动时吸顶 */}
+      <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-card border border-[color:var(--border-subtle)]">
+        <table className="w-full min-w-[42rem] border-collapse text-sm">
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-[color:var(--border-subtle)] bg-slate-50 dark:bg-slate-800/60">
               {selectable && (
                 <th className="w-10 px-3 py-2.5">

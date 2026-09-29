@@ -256,7 +256,7 @@ export function TeachingMatrixPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">教学任务</h1>
@@ -308,8 +308,9 @@ export function TeachingMatrixPage(): React.JSX.Element {
         </label>
       </div>
 
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
+      {/* 窄屏（<1280）上下堆叠，宽屏左右分栏；min-h-0 让矩阵能在剩余高度里自己滚动 */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row xl:items-stretch">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <MatrixEditor
             rows={rows}
             cols={cols}
@@ -319,7 +320,7 @@ export function TeachingMatrixPage(): React.JSX.Element {
             onAssignTeacher={(cells) => setPicker({ cells })}
             onSelectionChange={setSelection}
           />
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[color:var(--text-secondary)]">
+          <div className="mt-2 shrink-0 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[color:var(--text-secondary)]">
             {SHORTCUTS.map(([k, v]) => (
               <span key={k}>
                 <kbd className="rounded border border-[color:var(--border-subtle)] bg-slate-100 px-1 py-px font-mono text-[10px] dark:bg-slate-800">

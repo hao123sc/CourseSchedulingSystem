@@ -42,7 +42,7 @@ export function WorkloadPanel({
   }, [workloads, query, onlyIssues])
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] p-3">
+    <aside className="flex w-full shrink-0 flex-col gap-3 rounded-card xl:w-72 border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] p-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">教师工作量</h3>
         {stats.overCount > 0 ? (
@@ -76,7 +76,7 @@ export function WorkloadPanel({
         只看超限
       </label>
 
-      <ul className="flex max-h-[46vh] flex-col gap-1 overflow-y-auto pr-1">
+      <ul className="flex max-h-[16rem] min-h-0 flex-col gap-1 overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
         {list.length === 0 && (
           <li className="py-6 text-center text-xs text-[color:var(--text-secondary)]">
             没有匹配的教师

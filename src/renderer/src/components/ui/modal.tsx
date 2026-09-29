@@ -43,7 +43,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] shadow-lg animate-in fade-in zoom-in-95 duration-150',
+          'relative z-10 flex max-h-[85dvh] w-full max-w-[min(92vw,32rem)] flex-col rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] shadow-lg animate-in fade-in zoom-in-95 duration-150',
           className
         )}
       >

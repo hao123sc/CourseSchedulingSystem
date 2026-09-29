@@ -150,7 +150,7 @@ export function CurriculumDialog({
             </span>
             <Badge tone={total > 45 ? 'amber' : 'brand'}>周合计 {total} 节</Badge>
           </div>
-          <div className="grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto rounded-card border border-[color:var(--border-subtle)] p-2 sm:grid-cols-3">
+          <div className="grid max-h-64 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2 rounded-card border border-[color:var(--border-subtle)] p-2 sm:grid-cols-3">
             {entries.map((e) => {
               const unknown = !subjectNames.has(e.subject)
               return (

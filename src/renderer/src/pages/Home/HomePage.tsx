@@ -47,7 +47,7 @@ export function HomePage(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">工作台</h1>
         <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
@@ -61,7 +61,7 @@ export function HomePage(): React.JSX.Element {
         </CardHeader>
         <CardContent>
           {ping ? (
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <dt className="text-[color:var(--text-secondary)]">应用版本</dt>
               <dd>{ping.appVersion}</dd>
               <dt className="text-[color:var(--text-secondary)]">Electron</dt>
