@@ -27,7 +27,65 @@ import {
   type RuleQueryContext,
   type ScopedRule
 } from '@shared/constraints'
-import type { FixedLesson, FixedLessonInput, TimeRule, TimeSlot } from '@shared/types/entities'
+import type {
+  FixedLesson,
+  FixedLessonInput,
+  TeachingTask,
+  TimeRule,
+  TimeSlot
+} from '@shared/types/entities'
+
+/**
+ * 从教学任务里抽出的「谁教谁什么」关系，用来把弹窗里的下拉收敛到合理范围。
+ *
+ * 不做成硬过滤：预排里有代课、活动课、临时借班这类课表外情况，
+ * 相关项排在前面分组，其余仍可选，但选了对不上的组合会当场提示。
+ */
+export interface TaskIndex {
+  /** classId → 该班有教学任务的学科 */
+  subjectsOfClass: Map<number, number[]>
+  /** `classId#subjectId` → 任课教师 */
+  teachersOfClassSubject: Map<string, number[]>
+  /** classId → 教这个班的全部教师 */
+  teachersOfClass: Map<number, number[]>
+  /** teacherId → 他任教的班 */
+  classesOfTeacher: Map<number, number[]>
+  /** `teacherId#classId` → 他在这个班教的学科 */
+  subjectsOfTeacherInClass: Map<string, number[]>
+  /** `classId#subjectId` → 该教学任务绑定的固定教室 */
+  roomOfClassSubject: Map<string, number>
+}
+
+const pairKey = (a: number | string, b: number | string): string => `${a}#${b}`
+
+function pushUnique<K>(m: Map<K, number[]>, k: K, v: number): void {
+  const arr = m.get(k)
+  if (!arr) m.set(k, [v])
+  else if (!arr.includes(v)) arr.push(v)
+}
+
+function buildTaskIndex(tasks: TeachingTask[]): TaskIndex {
+  const idx: TaskIndex = {
+    subjectsOfClass: new Map(),
+    teachersOfClassSubject: new Map(),
+    teachersOfClass: new Map(),
+    classesOfTeacher: new Map(),
+    subjectsOfTeacherInClass: new Map(),
+    roomOfClassSubject: new Map()
+  }
+  for (const t of tasks) {
+    pushUnique(idx.subjectsOfClass, t.classId, t.subjectId)
+    if (t.fixedRoomId != null) {
+      idx.roomOfClassSubject.set(pairKey(t.classId, t.subjectId), t.fixedRoomId)
+    }
+    if (t.teacherId == null) continue
+    pushUnique(idx.teachersOfClassSubject, pairKey(t.classId, t.subjectId), t.teacherId)
+    pushUnique(idx.teachersOfClass, t.classId, t.teacherId)
+    pushUnique(idx.classesOfTeacher, t.teacherId, t.classId)
+    pushUnique(idx.subjectsOfTeacherInClass, pairKey(t.teacherId, t.classId), t.subjectId)
+  }
+  return idx
+}
 
 export type BoardMode = 'classroom' | 'teacher' | 'class'
 
@@ -78,6 +136,7 @@ export function FixedLessonBoard({
   const [search, setSearch] = useState('')
   const [roomType, setRoomType] = useState<string>('')
   const [timeRules, setTimeRules] = useState<TimeRule[]>([])
+  const [tasks, setTasks] = useState<TeachingTask[]>([])
   const [editing, setEditing] = useState<{ slot: TimeSlot; row: FixedLesson | null } | null>(null)
 
   const gradeById = useMemo(() => new Map(meta.grades.map((g) => [g.id, g])), [meta.grades])
@@ -102,6 +161,19 @@ export function FixedLessonBoard({
       alive = false
     }
   }, [semesterId, rows])
+
+  // 教学任务：用来让弹窗里的「班级 / 学科 / 教师」三个下拉互相收敛
+  useEffect(() => {
+    let alive = true
+    void api['task:list'](semesterId).then((t) => {
+      if (alive) setTasks(t)
+    })
+    return () => {
+      alive = false
+    }
+  }, [semesterId])
+
+  const taskIndex = useMemo(() => buildTaskIndex(tasks), [tasks])
 
   // ── 左侧资源候选 ──────────────────────────────────────────────────────
   const resources = useMemo(() => {
@@ -212,11 +284,14 @@ export function FixedLessonBoard({
           : mode === 'teacher'
             ? [subject, room]
             : [subject, teacher]
+      const title = mode === 'class' ? (subject ?? r.label ?? '预排课') : owner
+      const detail = parts.filter(Boolean).join(' · ')
       return {
         id: r.id,
         kind: 'lesson',
-        title: mode === 'class' ? (subject ?? r.label ?? '预排课') : owner,
-        subtitle: parts.filter(Boolean).join(' · ') || r.label,
+        title,
+        // 标题已经把 label 用掉了就别再重复一遍（升旗仪式 / 升旗仪式）
+        subtitle: detail || (title === r.label ? null : r.label),
         conflict: conflictIds.has(r.id),
         readOnly: isGrade
       }
@@ -447,6 +522,7 @@ export function FixedLessonBoard({
           slot={editing.slot}
           row={editing.row}
           rows={rows}
+          taskIndex={taskIndex}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -467,6 +543,7 @@ function CellEditor({
   slot,
   row,
   rows,
+  taskIndex,
   onClose,
   onSaved
 }: {
@@ -476,6 +553,7 @@ function CellEditor({
   slot: TimeSlot
   row: FixedLesson | null
   rows: FixedLesson[]
+  taskIndex: TaskIndex
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
@@ -504,6 +582,96 @@ function CellEditor({
     () => meta.classes.filter((c) => gradeById.get(c.gradeId)?.stageId === slot.stageId),
     [meta.classes, gradeById, slot.stageId]
   )
+
+  // ── 三个下拉的「相关项」：按教学任务收敛，不相关的仍可选但排到后面一组 ──
+  const relatedClassIds = useMemo(() => {
+    if (mode !== 'teacher') return null
+    return new Set(taskIndex.classesOfTeacher.get(resourceId) ?? [])
+  }, [mode, resourceId, taskIndex])
+
+  const relatedSubjectIds = useMemo(() => {
+    if (mode === 'teacher' && classId !== '') {
+      return new Set(taskIndex.subjectsOfTeacherInClass.get(`${resourceId}#${classId}`) ?? [])
+    }
+    if (classId !== '') return new Set(taskIndex.subjectsOfClass.get(Number(classId)) ?? [])
+    return null
+  }, [mode, resourceId, classId, taskIndex])
+
+  /** 该班该科的任课教师；只选了班级时退化为「教这个班的所有老师」 */
+  const relatedTeacherIds = useMemo(() => {
+    if (classId === '') return null
+    if (subjectId !== '') {
+      return new Set(taskIndex.teachersOfClassSubject.get(`${classId}#${subjectId}`) ?? [])
+    }
+    return new Set(taskIndex.teachersOfClass.get(Number(classId)) ?? [])
+  }, [classId, subjectId, taskIndex])
+
+  /**
+   * 选定「班级 + 学科」后自动带出任课教师。
+   * 唯一就直接填；原来的选择明显对不上（不在任课名单里）就清掉让人重选。
+   * 用函数式更新读最新值，避免把 teacherId 放进依赖导致来回打架。
+   */
+  useEffect(() => {
+    if (kind !== 'lesson' || mode === 'teacher') return
+    if (classId === '' || subjectId === '') return
+    const cands = taskIndex.teachersOfClassSubject.get(`${classId}#${subjectId}`) ?? []
+    if (cands.length === 0) return
+    setTeacherId((prev) => {
+      if (cands.length === 1) return cands[0]
+      if (prev !== '' && !cands.includes(Number(prev))) return ''
+      return prev
+    })
+  }, [classId, subjectId, kind, mode, taskIndex])
+
+  /** 该教学任务若绑了固定教室，教室没填时一并带出来 */
+  useEffect(() => {
+    if (kind !== 'lesson' || mode === 'classroom') return
+    if (classId === '' || subjectId === '') return
+    const room = taskIndex.roomOfClassSubject.get(`${classId}#${subjectId}`)
+    if (room == null) return
+    setClassroomId((prev) => (prev === '' ? room : prev))
+  }, [classId, subjectId, kind, mode, taskIndex])
+
+  /** 组合不符合教学任务时的温和提示（不拦保存，代课/活动课是合理场景） */
+  const hints = useMemo(() => {
+    if (kind !== 'lesson') return []
+    const out: string[] = []
+    const nameOf = (list: { id: number; name: string }[], id: number | ''): string =>
+      list.find((x) => x.id === id)?.name ?? '所选项'
+    if (classId !== '' && subjectId !== '') {
+      const cands = taskIndex.teachersOfClassSubject.get(`${classId}#${subjectId}`) ?? []
+      if (cands.length === 0) {
+        out.push(
+          `${nameOf(meta.classes, classId)} 没有「${nameOf(meta.subjects, subjectId)}」的教学任务，` +
+            `确认要在这里排吗？`
+        )
+      } else if (teacherId !== '' && !cands.includes(Number(teacherId))) {
+        out.push(
+          `${nameOf(meta.teachers, teacherId)} 不是 ${nameOf(meta.classes, classId)} ` +
+            `「${nameOf(meta.subjects, subjectId)}」的任课教师（应为 ` +
+            `${cands.map((id) => nameOf(meta.teachers, id)).join('、')}）`
+        )
+      }
+    }
+    if (mode === 'teacher' && classId !== '' && !(relatedClassIds?.has(Number(classId)) ?? true)) {
+      out.push(
+        `${nameOf(meta.teachers, resourceId)} 在教学任务里没有带 ${nameOf(meta.classes, classId)}`
+      )
+    }
+    return out
+  }, [
+    kind,
+    mode,
+    classId,
+    subjectId,
+    teacherId,
+    resourceId,
+    relatedClassIds,
+    taskIndex,
+    meta.classes,
+    meta.subjects,
+    meta.teachers
+  ])
 
   const ctx: FixedLessonContext = useMemo(() => {
     const classGrade = new Map<number, number>()
@@ -684,11 +852,12 @@ function CellEditor({
               className="h-8 text-xs"
             >
               <option value="">请选择班级</option>
-              {classOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              <GroupedOptions
+                items={classOptions}
+                related={relatedClassIds}
+                relatedLabel="该教师任教的班"
+                otherLabel="其他班级"
+              />
             </Select>
           </Row>
         )}
@@ -701,11 +870,12 @@ function CellEditor({
               className="h-8 text-xs"
             >
               <option value="">不指定学科</option>
-              {meta.subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              <GroupedOptions
+                items={meta.subjects}
+                related={relatedSubjectIds}
+                relatedLabel="该班开设的学科"
+                otherLabel="其他学科"
+              />
             </Select>
           </Row>
         )}
@@ -718,13 +888,12 @@ function CellEditor({
             className="h-8 text-xs"
           >
             <option value="">不指定教师</option>
-            {meta.teachers
-              .filter((t) => t.enabled)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
+            <GroupedOptions
+              items={meta.teachers.filter((t) => t.enabled)}
+              related={kind === 'lesson' ? relatedTeacherIds : null}
+              relatedLabel={subjectId === '' ? '教这个班的老师' : '该班该科任课教师'}
+              otherLabel="其他教师"
+            />
           </Select>
         </Row>
 
@@ -755,6 +924,14 @@ function CellEditor({
           />
         </Row>
 
+        {hints.length > 0 && (
+          <ul className="flex flex-col gap-1 rounded-card border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            {hints.map((h, i) => (
+              <li key={i}>· {h}</li>
+            ))}
+          </ul>
+        )}
+
         {issues.length > 0 && (
           <ul className="flex flex-col gap-1 rounded-card border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
             {issues.map((c, i) => (
@@ -776,6 +953,56 @@ function CellEditor({
         )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * 把候选项拆成「相关」「其他」两组。相关组排在前面，
+ * 既把人往对的选项上引，又不封死代课、活动课这类课表外的情况。
+ */
+function GroupedOptions({
+  items,
+  related,
+  relatedLabel,
+  otherLabel
+}: {
+  items: { id: number; name: string }[]
+  related: Set<number> | null
+  relatedLabel: string
+  otherLabel: string
+}): React.JSX.Element {
+  if (related == null || related.size === 0) {
+    return (
+      <>
+        {items.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </>
+    )
+  }
+  const hit = items.filter((o) => related.has(o.id))
+  const rest = items.filter((o) => !related.has(o.id))
+  return (
+    <>
+      <optgroup label={relatedLabel}>
+        {hit.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </optgroup>
+      {rest.length > 0 && (
+        <optgroup label={otherLabel}>
+          {rest.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
   )
 }
 

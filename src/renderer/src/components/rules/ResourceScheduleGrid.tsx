@@ -190,8 +190,8 @@ export function ResourceScheduleGrid({
                           {ruleMeta.short}
                         </span>
                       )}
-                      {/* 并发容量 */}
-                      {stat != null && stat.cap > 1 && (
+                      {/* 并发容量：只在真有占用时提示还剩几个班位 */}
+                      {stat != null && stat.cap > 1 && stat.used > 0 && (
                         <span
                           className={cn(
                             'absolute right-0.5 top-0.5 text-[9px] tabular-nums',
