@@ -72,6 +72,19 @@ npm run seed:m2       # 在此之上补齐教学任务 / 时段规则 / 学科�
 #    Windows 若仍看到乱码：先在终端敲一次 chcp 65001（脚本已会自动切，个别终端拦得住）
 ```
 
+```bash
+# 6. 清空 / 重置数据
+npm run db:reset              # 清空业务数据，保留内置的学段作息 / 学科 / 权重档位
+npm run db:reset -- --all     # 连内置字典一起清，恢复出厂
+npm run db:reset -- --hard    # 删掉 data.db 后按迁移重建（等价于第一次安装）
+npm run db:reset -- --dry-run # 只统计不删，先看看会清掉多少行
+
+# 7. 不装 Electron 也能看界面（沙箱 / CI / 想快速看 UI 时用）
+npm run preview:ui            # 普通浏览器打开 http://localhost:5174
+#    渲染层代码一行不改，IPC 调用经由 vite 中间件交给真实的主进程 handler，
+#    读写真实的 .local-data/data.db；Excel 导入导出因需系统对话框会返回"已取消"
+```
+
 **关于 Windows exe**：`electron-builder` 在打 Windows 包时会用 `rcedit` 给 exe 写图标/版本信息；
 在 Windows 宿主机上原生打包不需要额外工具。若你想在 macOS/Linux 上**交叉编译** Windows 包，
 需要额外装 `wine`（`brew install --cask wine-stable` 或 `apt install wine`），否则图标写入步骤会失败。
