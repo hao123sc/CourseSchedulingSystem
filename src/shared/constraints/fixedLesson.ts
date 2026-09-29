@@ -224,7 +224,7 @@ export function detectFixedLessonConflicts(
           message:
             limit === 0
               ? '这门课的教学任务周课时为 0，不能预排'
-              : `课时超额：该班这门课预排了 ${idxs.length} 节，教学任务只有 ${limit} 节`,
+              : `课时超额：预排了 ${idxs.length} 节，教学任务只有 ${limit} 节`,
           indexes: idxs
         })
       }

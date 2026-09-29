@@ -75,6 +75,24 @@ export function FixedLessonTab({ semesterId }: Props): React.JSX.Element {
     toast.success('已删除预排占位')
   }
 
+  /**
+   * 冲突转成人话。课时超额是「一个班一门课」整体的问题，跟某一节无关 ——
+   * 标时段反而让人以为只有那节要改，所以换成班级 + 学科作主语。
+   */
+  const describeConflict = (c: FixedLessonConflict): string => {
+    if (c.kind !== 'quota') return `${slotLabel(c.slotId)}：${c.message}`
+    const r = c.indexes.map((i) => rows[i]).find(Boolean)
+    const who =
+      r?.classId != null
+        ? (meta.classes.find((x) => x.id === r.classId)?.name ?? '某班')
+        : r?.gradeId != null
+          ? `${meta.grades.find((x) => x.id === r.gradeId)?.name ?? '某年级'} 整年级`
+          : '某班'
+    const sub =
+      r?.subjectId != null ? (meta.subjects.find((x) => x.id === r.subjectId)?.name ?? '') : ''
+    return `${who}「${sub}」${c.message}`
+  }
+
   const slotLabel = (slotId: number): string => {
     const s = slotById.get(slotId)
     if (!s) return `时段#${slotId}`
@@ -109,18 +127,16 @@ export function FixedLessonTab({ semesterId }: Props): React.JSX.Element {
         </p>
         <div className="ml-auto flex items-center gap-2">
           <Badge tone={conflicts.length > 0 ? 'red' : 'green'}>
-            {conflicts.length > 0 ? `${conflicts.length} 处冲突` : '无冲突'}
+            {conflicts.length > 0 ? `全学期 ${conflicts.length} 处冲突` : '全学期无冲突'}
           </Badge>
           {view === 'list' && <Button onClick={() => setAdding(true)}>批量新增</Button>}
         </div>
       </div>
 
-      {conflicts.length > 0 && view === 'list' && (
+      {conflicts.length > 0 && (
         <ul className="flex flex-col gap-1 rounded-card border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
           {conflicts.slice(0, 8).map((c, i) => (
-            <li key={i}>
-              · {slotLabel(c.slotId)}：{c.message}
-            </li>
+            <li key={i}>· {describeConflict(c)}</li>
           ))}
           {conflicts.length > 8 && <li>…… 还有 {conflicts.length - 8} 处</li>}
         </ul>

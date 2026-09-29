@@ -530,7 +530,7 @@ export function FixedLessonBoard({
                 {mode === 'classroom' &&
                   `；该场地并发容量 ${roomById.get(resourceId)?.concurrentCapacity ?? 1} 个班位`}
               </span>
-              {conflictCount > 0 && <Badge tone="red">{conflictCount} 处冲突</Badge>}
+              {conflictCount > 0 && <Badge tone="red">这张表 {conflictCount} 格标红</Badge>}
               <span className="ml-auto flex items-center gap-2 text-[10px] text-[color:var(--text-secondary)]">
                 <span className="inline-flex items-center gap-1">
                   <i className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-600" /> 预排课
