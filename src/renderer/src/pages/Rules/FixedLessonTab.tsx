@@ -8,6 +8,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Badge } from '@renderer/components/ui/badge'
 import { Modal } from '@renderer/components/ui/modal'
 import { cn } from '@renderer/lib/utils'
+import { FixedLessonBoard, type BoardMode } from './FixedLessonBoard'
 import { WEEKDAY_NAMES } from '@shared/domain'
 import type { FixedLessonConflict } from '@shared/constraints'
 import type { FixedLesson, FixedLessonInput, TimeSlot } from '@shared/types/entities'
@@ -16,12 +17,26 @@ interface Props {
   semesterId: number
 }
 
+type ViewKey = 'list' | BoardMode
+
+/**
+ * 四种录入视角。列表适合批量（升旗这种一次铺 60 个班），
+ * 三张网格适合「打开这间房 / 这位老师 / 这个班的课表，看哪节空着」。
+ */
+const VIEWS: { key: ViewKey; label: string; hint: string }[] = [
+  { key: 'list', label: '列表', hint: '全部占位一览，支持批量新增' },
+  { key: 'classroom', label: '按教室', hint: '打开某间教室的周课表，在格子上点选' },
+  { key: 'teacher', label: '按教师', hint: '打开某位教师的周课表，指定他哪一节上哪个班' },
+  { key: 'class', label: '按班级', hint: '打开某个班的周课表，钉死某一节' }
+]
+
 /** 预排锁定 fixed_lesson：升旗、班会等固定占位（硬约束 H7） */
 export function FixedLessonTab({ semesterId }: Props): React.JSX.Element {
   const meta = useMetaStore()
   const [rows, setRows] = useState<FixedLesson[]>([])
   const [conflicts, setConflicts] = useState<FixedLessonConflict[]>([])
   const [adding, setAdding] = useState(false)
+  const [view, setView] = useState<ViewKey>('list')
 
   const load = useCallback(async () => {
     const [list, conf] = await Promise.all([
@@ -68,19 +83,39 @@ export function FixedLessonTab({ semesterId }: Props): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1 rounded-btn border border-[color:var(--border-subtle)] p-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              title={v.hint}
+              onClick={() => setView(v.key)}
+              className={cn(
+                'rounded px-2.5 py-1 text-xs font-medium transition-colors',
+                view === v.key
+                  ? 'bg-brand-600 text-white'
+                  : 'text-[color:var(--text-secondary)] hover:bg-slate-100 dark:hover:bg-slate-800'
+              )}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
         <p className="text-sm text-[color:var(--text-secondary)]">
-          预排占位是硬约束 H7，排课时不可被侵占；整年级占位会锁住该年级全部班级
+          {view === 'list'
+            ? '预排占位是硬约束 H7，排课时不可被侵占；整年级占位会锁住该年级全部班级'
+            : (VIEWS.find((v) => v.key === view)?.hint ?? '')}
         </p>
         <div className="ml-auto flex items-center gap-2">
           <Badge tone={conflicts.length > 0 ? 'red' : 'green'}>
             {conflicts.length > 0 ? `${conflicts.length} 处冲突` : '无冲突'}
           </Badge>
-          <Button onClick={() => setAdding(true)}>新增预排</Button>
+          {view === 'list' && <Button onClick={() => setAdding(true)}>批量新增</Button>}
         </div>
       </div>
 
-      {conflicts.length > 0 && (
+      {conflicts.length > 0 && view === 'list' && (
         <ul className="flex flex-col gap-1 rounded-card border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
           {conflicts.slice(0, 8).map((c, i) => (
             <li key={i}>
@@ -91,66 +126,88 @@ export function FixedLessonTab({ semesterId }: Props): React.JSX.Element {
         </ul>
       )}
 
-      <div className="overflow-x-auto rounded-card border border-[color:var(--border-subtle)]">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs dark:bg-slate-800/60">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold">时段</th>
-              <th className="px-3 py-2 text-left font-semibold">作用对象</th>
-              <th className="px-3 py-2 text-left font-semibold">名称</th>
-              <th className="px-3 py-2 text-left font-semibold">学科</th>
-              <th className="px-3 py-2 text-left font-semibold">教师</th>
-              <th className="px-3 py-2 text-left font-semibold">教室</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
+      {view !== 'list' && (
+        <FixedLessonBoard
+          semesterId={semesterId}
+          mode={view}
+          rows={rows}
+          conflictIds={conflictRowIds}
+          onChanged={() => void load()}
+        />
+      )}
+
+      {view === 'list' && (
+        <div className="overflow-x-auto rounded-card border border-[color:var(--border-subtle)]">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs dark:bg-slate-800/60">
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-3 py-10 text-center text-sm text-[color:var(--text-secondary)]"
-                >
-                  还没有预排占位。常见用法：周一第 1 节全校升旗、每周班会、教师例会时段。
-                </td>
+                <th className="px-3 py-2 text-left font-semibold">时段</th>
+                <th className="px-3 py-2 text-left font-semibold">类型</th>
+                <th className="px-3 py-2 text-left font-semibold">作用对象</th>
+                <th className="px-3 py-2 text-left font-semibold">名称</th>
+                <th className="px-3 py-2 text-left font-semibold">学科</th>
+                <th className="px-3 py-2 text-left font-semibold">教师</th>
+                <th className="px-3 py-2 text-left font-semibold">教室</th>
+                <th className="px-3 py-2" />
               </tr>
-            )}
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className={cn(
-                  'border-t border-[color:var(--border-subtle)]',
-                  conflictRowIds.has(r.id) && 'bg-red-50/70 dark:bg-red-950/20'
-                )}
-              >
-                <td className="px-3 py-1.5 whitespace-nowrap">{slotLabel(r.slotId)}</td>
-                <td className="px-3 py-1.5">
-                  {r.gradeId != null ? (
-                    <Badge tone="brand">{gradeById.get(r.gradeId)?.name ?? '年级'} 整年级</Badge>
-                  ) : (
-                    <span>{classById.get(r.classId ?? -1)?.name ?? '—'}</span>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-10 text-center text-sm text-[color:var(--text-secondary)]"
+                  >
+                    还没有预排占位。常见用法：周一第 1 节全校升旗、每周班会、教师例会时段。
+                  </td>
+                </tr>
+              )}
+              {rows.map((r) => (
+                <tr
+                  key={r.id}
+                  className={cn(
+                    'border-t border-[color:var(--border-subtle)]',
+                    conflictRowIds.has(r.id) && 'bg-red-50/70 dark:bg-red-950/20'
                   )}
-                </td>
-                <td className="px-3 py-1.5">{r.label ?? '—'}</td>
-                <td className="px-3 py-1.5">
-                  {r.subjectId != null ? (subjectById.get(r.subjectId)?.name ?? '—') : '—'}
-                </td>
-                <td className="px-3 py-1.5">
-                  {r.teacherId != null ? (teacherById.get(r.teacherId)?.name ?? '—') : '—'}
-                </td>
-                <td className="px-3 py-1.5">
-                  {r.classroomId != null ? (roomById.get(r.classroomId)?.name ?? '—') : '—'}
-                </td>
-                <td className="px-3 py-1.5 text-right">
-                  <Button variant="ghost" size="sm" onClick={() => void remove(r.id)}>
-                    删除
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                >
+                  <td className="px-3 py-1.5 whitespace-nowrap">{slotLabel(r.slotId)}</td>
+                  <td className="px-3 py-1.5">
+                    {r.kind === 'block' ? (
+                      <Badge tone="slate">仅占用</Badge>
+                    ) : (
+                      <Badge tone="brand">预排课</Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {r.kind === 'block' ? (
+                      <span className="text-[color:var(--text-secondary)]">—</span>
+                    ) : r.gradeId != null ? (
+                      <Badge tone="brand">{gradeById.get(r.gradeId)?.name ?? '年级'} 整年级</Badge>
+                    ) : (
+                      <span>{classById.get(r.classId ?? -1)?.name ?? '—'}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">{r.label ?? '—'}</td>
+                  <td className="px-3 py-1.5">
+                    {r.subjectId != null ? (subjectById.get(r.subjectId)?.name ?? '—') : '—'}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {r.teacherId != null ? (teacherById.get(r.teacherId)?.name ?? '—') : '—'}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {r.classroomId != null ? (roomById.get(r.classroomId)?.name ?? '—') : '—'}
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
+                    <Button variant="ghost" size="sm" onClick={() => void remove(r.id)}>
+                      删除
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {adding && (
         <AddFixedLessonModal
