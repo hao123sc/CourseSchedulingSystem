@@ -178,7 +178,9 @@ function AddFixedLessonModal({
   const meta = useMetaStore()
   const [target, setTarget] = useState<'grade' | 'class'>('grade')
   const [targetIds, setTargetIds] = useState<number[]>([])
-  const [stageId, setStageId] = useState<number | null>(meta.stages[0]?.id ?? null)
+  const [stageId, setStageId] = useState<number | null>(
+    (meta.stages.find((s) => s.enabled) ?? meta.stages[0])?.id ?? null
+  )
   const [slotIds, setSlotIds] = useState<number[]>([])
   const [label, setLabel] = useState('升旗仪式')
   const [subjectId, setSubjectId] = useState<number | ''>('')

@@ -16,16 +16,21 @@ import { StageScheduleManager } from './StageScheduleManager'
 
 export function SchoolSetupPage(): React.JSX.Element {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">学校设置</h1>
         <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
           配置学校基本信息、学期与各学段作息
         </p>
       </div>
-      <SchoolInfoCard />
-      <SemesterManager />
-      <StageScheduleManager />
+      {/* 超宽屏（≥1536px）分两列，作息占整行；窄屏仍是上下堆叠 */}
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <SchoolInfoCard />
+        <SemesterManager />
+        <div className="2xl:col-span-2">
+          <StageScheduleManager />
+        </div>
+      </div>
     </div>
   )
 }

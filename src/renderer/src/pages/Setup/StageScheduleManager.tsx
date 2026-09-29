@@ -299,7 +299,7 @@ function ScheduleEditModal({
         </>
       }
     >
-      <div className="flex flex-col gap-2 overflow-x-auto">
+      <div className="flex flex-col gap-2 overflow-x-auto overflow-y-hidden">
         <div className="grid min-w-[40rem] grid-cols-[2fr_1.5fr_1.2fr_1.2fr_auto_auto] items-center gap-2 px-1 text-xs font-medium text-[color:var(--text-secondary)]">
           <span>节次名称</span>
           <span>时段</span>

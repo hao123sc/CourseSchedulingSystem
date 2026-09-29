@@ -26,7 +26,7 @@ export function BaseDataPage(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--border-subtle)]">
+      <div className="flex flex-wrap gap-1 border-b border-[color:var(--border-subtle)]">
         {TABS.map((t) => (
           <button
             key={t.key}

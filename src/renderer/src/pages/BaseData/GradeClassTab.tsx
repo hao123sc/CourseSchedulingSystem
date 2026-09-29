@@ -311,7 +311,7 @@ function GradeEditModal({
   const [form, setForm] = useState<GradeInput>({
     id: grade?.id,
     semesterId,
-    stageId: grade?.stageId ?? stages[0]?.id ?? 0,
+    stageId: grade?.stageId ?? stages.find((s) => s.enabled)?.id ?? stages[0]?.id ?? 0,
     name: grade?.name ?? '',
     enrollYear: grade?.enrollYear ?? null
   })

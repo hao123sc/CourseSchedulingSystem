@@ -147,7 +147,7 @@ export function EntityTable<T>({
       </div>
 
       {/* 窗口变窄时表格横向滚动，而不是把列挤成一团；表头在纵向滚动时吸顶 */}
-      <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-card border border-[color:var(--border-subtle)]">
+      <div className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-card border border-[color:var(--border-subtle)]">
         <table className="w-full min-w-[42rem] border-collapse text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[color:var(--border-subtle)] bg-slate-50 dark:bg-slate-800/60">

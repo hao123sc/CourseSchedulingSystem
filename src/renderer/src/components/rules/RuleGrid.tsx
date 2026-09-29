@@ -163,7 +163,7 @@ export function RuleGrid({
       {/* 网格 */}
       <div
         className={cn(
-          'max-w-full select-none overflow-x-auto overscroll-x-contain rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)]',
+          'w-fit max-w-full select-none overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)]',
           disabled && 'pointer-events-none opacity-60'
         )}
       >

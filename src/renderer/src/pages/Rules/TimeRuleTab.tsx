@@ -52,7 +52,11 @@ export function TimeRuleTab({ semesterId }: Props): React.JSX.Element {
 
   // 默认学段
   useEffect(() => {
-    if (stageId == null && meta.stages.length > 0) setStageId(meta.stages[0].id)
+    if (stageId == null && meta.stages.length > 0) {
+      // 优先落在启用中的学段：示范高完中停用了小学，默认选中它会显示一套用不上的作息
+      const first = meta.stages.find((s) => s.enabled) ?? meta.stages[0]
+      setStageId(first.id)
+    }
   }, [meta.stages, stageId])
 
   // 切换作用域类型时挑第一个实体
