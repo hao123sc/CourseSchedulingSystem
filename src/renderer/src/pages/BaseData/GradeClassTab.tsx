@@ -11,11 +11,12 @@ import { toast } from '@renderer/stores/toastStore'
 import { useSchoolStore } from '@renderer/stores/schoolStore'
 import { buildBatchNames } from '@shared/classNaming'
 import { cn } from '@renderer/lib/utils'
-import type { Grade, GradeInput, Klass, KlassInput, Stage } from '@shared/types/entities'
+import type { Grade, GradeInput, Klass, KlassInput, Stage, Teacher } from '@shared/types/entities'
 
 export function GradeClassTab(): React.JSX.Element {
   const { currentSemester } = useSchoolStore()
   const [stages, setStages] = useState<Stage[]>([])
+  const [teachers, setTeachers] = useState<Teacher[]>([])
   const [grades, setGrades] = useState<Grade[]>([])
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null)
   const [classes, setClasses] = useState<Klass[]>([])
@@ -46,8 +47,13 @@ export function GradeClassTab(): React.JSX.Element {
     setClasses(await api['class:listByGrade'](selectedGradeId))
   }
 
+  async function reloadTeachers(): Promise<void> {
+    setTeachers(await api['teacher:list']())
+  }
+
   useEffect(() => {
     void (async () => setStages(await api['stage:list']()))()
+    void reloadTeachers()
   }, [])
   useEffect(() => {
     void reloadGrades()
@@ -67,6 +73,7 @@ export function GradeClassTab(): React.JSX.Element {
   }
 
   const stageName = new Map(stages.map((s) => [s.id, s.name]))
+  const teacherName = new Map(teachers.map((t) => [t.id, t.name]))
   const selectedGrade = grades.find((g) => g.id === selectedGradeId) ?? null
 
   const columns: Column<Klass>[] = [
@@ -78,6 +85,17 @@ export function GradeClassTab(): React.JSX.Element {
     },
     { key: 'shortName', header: '简称', render: (r) => r.shortName ?? '—' },
     { key: 'studentCount', header: '学生数', align: 'center', sortValue: (r) => r.studentCount },
+    {
+      key: 'headTeacherId',
+      header: '班主任',
+      sortValue: (r) => (r.headTeacherId ? (teacherName.get(r.headTeacherId) ?? '') : ''),
+      render: (r) =>
+        r.headTeacherId ? (
+          (teacherName.get(r.headTeacherId) ?? `#${r.headTeacherId}`)
+        ) : (
+          <span className="text-[color:var(--text-secondary)]">—</span>
+        )
+    },
     {
       key: 'isVirtual',
       header: '类型',
@@ -222,6 +240,7 @@ export function GradeClassTab(): React.JSX.Element {
         <ClassEditModal
           klass={classModal === 'new' ? null : classModal}
           gradeId={selectedGrade.id}
+          teachers={teachers}
           onClose={() => setClassModal(null)}
           onSaved={() => {
             setClassModal(null)
@@ -358,11 +377,13 @@ function GradeEditModal({
 function ClassEditModal({
   klass,
   gradeId,
+  teachers,
   onClose,
   onSaved
 }: {
   klass: Klass | null
   gradeId: number
+  teachers: Teacher[]
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
@@ -372,7 +393,10 @@ function ClassEditModal({
     name: klass?.name ?? '',
     shortName: klass?.shortName ?? '',
     studentCount: klass?.studentCount ?? 45,
-    isVirtual: klass?.isVirtual ?? false
+    isVirtual: klass?.isVirtual ?? false,
+    headTeacherId: klass?.headTeacherId ?? null,
+    // 保留固定教室，避免编辑时被清空（固定教室由种子/后续里程碑维护）
+    homeRoomId: klass?.homeRoomId ?? null
   })
   const [busy, setBusy] = useState(false)
 
@@ -430,6 +454,27 @@ function ClassEditModal({
             value={form.studentCount}
             onChange={(e) => setForm({ ...form, studentCount: Number(e.target.value) })}
           />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>班主任</Label>
+          <select
+            className="h-9 rounded-input border border-[color:var(--border-subtle)] bg-[color:var(--surface)] px-2 text-sm"
+            value={form.headTeacherId ?? ''}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                headTeacherId: e.target.value === '' ? null : Number(e.target.value)
+              })
+            }
+          >
+            <option value="">未指定</option>
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.staffNo ? `（${t.staffNo}）` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <label className="flex items-end gap-2 pb-2 text-sm">
           <input
