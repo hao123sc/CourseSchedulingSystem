@@ -12,7 +12,7 @@
 |---|---|
 | **当前阶段** | **M0 工程骨架已完成并通过真机验收** |
 | **下一个里程碑** | **M1 · 数据层与基础数据** |
-| **工作分支** | `arena/01a0e81b-courseschedulingsystem`（固定，勿切换） |
+| **工作分支** | 由 Arena 按会话自动分配（形如 `arena/xxxxxxxx-courseschedulingsystem`），每个新会话会在上一个会话分支的最新提交上派生出新分支 —— **不要在提示词里写死具体分支名，也不要要求切换/合并到其他分支**，跟着当前会话拿到的分支走即可，Arena 保证是上一次工作的延续 |
 | **PR** | https://github.com/hao123sc/CourseSchedulingSystem/pull/1 |
 | **代码行数** | ~770 行（`src/**/*.ts(x)`，不含 node_modules） |
 | **仓库体积** | ~2.0MB（不含 node_modules/.git） |
@@ -60,7 +60,7 @@
 1. **空间**：仓库总量 < 50MB；`node_modules`/构建产物一律 gitignore，绝不入库
 2. **文件**：不产生零散临时文件；中间产物用完即删（`/tmp` 下的脚本、下载缓存等）
 3. **验证**：每步操作后跑 `git status` + `du -sh`，确认无残留、无膨胀
-4. **分支**：只在 `arena/01a0e81b-courseschedulingsystem` 上工作，不切换、不新建分支
+4. **分支**：只在当前会话被分配到的那条 `arena/*-courseschedulingsystem` 分支上工作，不切换、不新建、不合并到其他分支——**提示词模板里不要写死具体分支名**，每个新会话的分支名都不一样（是上一个会话分支的延续），写死了反而会导致新会话卡住无法切换（历史教训见六、变更日志）
 5. **提交**：每个里程碑内的逻辑单元独立提交，信息用 `feat(模块): 说明` 格式
 6. **收尾**：会话结束前更新本文件的「当前状态」「里程碑进度」「变更日志」并提交推送
 
@@ -94,6 +94,7 @@
 | 2026-09-28 | #2 | M0 工程骨架：electron-vite + React + TS + Tailwind 骨架、左侧导航/主题切换、类型化 IPC（`shared/types/ipc.ts` + preload contextBridge）、`better-sqlite3` 接入（`src/main/db/connection.ts` + health_check 自检表 + IPC）、ESLint/Prettier/Vitest 配置、electron-builder 打包配置与图标。**发现沙箱出网白名单不含 GitHub Release CDN，无法在沙箱内下载 Electron 运行时/headers/打包工具**；已用本机 Node headers 编译 better-sqlite3 并跑通与生产代码一致的读写路径（`connection.test.ts`），`electron-vite build` 产物验证通过，`npm run typecheck/lint/test` 全绿；exe 实打包与 `npm run dev` 起窗口留给用户在本地/CI 反馈 |
 | 2026-09-28 | #3 | 用户在真实 Win11 机器上首次执行 `npm run build:win`：`electron-vite build` 产物正常、`better-sqlite3` Windows 预编译二进制安装成功、Electron 31.6.0 下载完成并进入 `packaging` 阶段，卡在 `winCodeSign` 工具包解压的符号链接权限问题（已定位为 electron-builder 在 Windows 上的通病，与项目代码无关，修复方法见五、风险）。顺手把 `postinstall` 从 `electron-rebuild` 换成 electron-builder 官方推荐的 `install-app-deps`（其日志主动提示了这一点），移除多余的 `@electron/rebuild` 依赖 |
 | 2026-09-28 | #3（续） | 用户开启开发者模式后复测：`npm run build:win` 成功产出 exe；`npm run dev` 窗口正常弹出，工作台页面读写测试行正常（渲染进程→preload→主进程 IPC→better-sqlite3 全链路打通）。**M0 全部验收项通过，正式关闭**，转入 M1 |
+| 2026-09-28 | #3（续二） | 修正一个跨会话文档 bug：`PROGRESS.md`/`docs/06`/`docs/08` 里之前写死了具体分支名 `arena/01a0e81b-courseschedulingsystem`，但 Arena 每个新会话都会自动分配一条新分支（是上一个会话分支的延续），导致新会话按文档提示词去"切换"到旧分支名时失败。已把三处文档里的硬编码分支名全部改成"跟随当前会话分配的分支，不写死名字"，并在 08 的故障排查表里补了这条已知现象 |
 
 ---
 
