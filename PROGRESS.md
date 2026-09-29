@@ -2,7 +2,7 @@
 
 > **本文件是项目状态的唯一事实来源（Single Source of Truth）。**
 > 每个会话开始时必须先读本文件；每个会话结束前必须更新本文件并提交。
-> 最后更新：2026-09-28 · **M0 已完成**（用户 Win11 真机验证通过：exe 打包成功、npm run dev 弹窗正常、DB 读写正常）
+> 最后更新：2026-09-29 · **M1 数据层与基础数据已完成**（沙箱侧：typecheck/lint/build 全绿，DDL 与迁移经真实 SQLite 引擎校验；集成测试在有原生模块的机器/CI 上跑，沙箱因网络限制自动 skip）
 
 ---
 
@@ -10,12 +10,12 @@
 
 | 项 | 值 |
 |---|---|
-| **当前阶段** | **M0 工程骨架已完成并通过真机验收** |
-| **下一个里程碑** | **M1 · 数据层与基础数据** |
-| **工作分支** | 由 Arena 按会话自动分配（形如 `arena/xxxxxxxx-courseschedulingsystem`），每个新会话会在上一个会话分支的最新提交上派生出新分支 —— **不要在提示词里写死具体分支名，也不要要求切换/合并到其他分支**，跟着当前会话拿到的分支走即可，Arena 保证是上一次工作的延续 |
+| **当前阶段** | **M1 数据层与基础数据已完成** |
+| **下一个里程碑** | **M2 · 教学任务与规则** |
+| **工作分支** | 由 Arena 按会话自动分配（形如 `arena/xxxxxxxx-courseschedulingsystem`）。⚠️ 本会话（#4）拿到的分支是从更早的**纯文档提交**派生的，**不含 M0 代码**；M0 代码在同级会话分支 `arena/01a0e87b`（tip `d4102d6`）。已在本分支上 `git merge --ff-only` 快进合并 M0 后再做 M1。若后续会话又遇到"分支缺上一步代码"，同样用 ff-merge 把上一会话分支并进来，**不要切换分支** |
 | **PR** | https://github.com/hao123sc/CourseSchedulingSystem/pull/1 |
-| **代码行数** | ~770 行（`src/**/*.ts(x)`，不含 node_modules） |
-| **仓库体积** | ~2.0MB（不含 node_modules/.git） |
+| **代码行数** | ~5150 行 TS/TSX + 458 行 SQL（`src/**`，不含 node_modules） |
+| **仓库体积** | ~1.8MB（不含 node_modules/.git） |
 
 ---
 
@@ -25,8 +25,7 @@
 |---|---|---|---|
 | 设计阶段 | ✅ 完成 | 2026-09-28 | 8 份文档 + 3 份视觉稿 |
 | **M0 · 工程骨架** | ✅ 完成 | 2026-09-28 | 用户在 Win11 真机验证：`npm run dev` 弹窗正常、工作台读写测试行正常、`npm run build:win` 成功出 exe。沙箱侧验证记录见六、变更日志 #2/#3 |
-| M1 · 数据层与基础数据 | ⬜ 未开始 | | |
-
+| **M1 · 数据层与基础数据** | ✅ 完成 | 2026-09-29 | 全量 DDL（`001_init.sql`，逐字取自 docs/03 §3）+ 迁移执行器 + 内置种子（3 学段/默认作息、19 学科含配色、3 档权重）+ 9 个 Repository + 全部 IPC + 页面（学校设置/学段作息/年级班级含批量生成 20 班/学科/教师/教室）+ 通用 `EntityTable` + 教师/班级/教室 Excel 导入导出（exceljs）。沙箱验证见变更日志 #4；Electron 起窗口/真机手测留待用户 |
 | M2 · 教学任务与规则 | ⬜ 未开始 | | |
 | M3 · 排课引擎 v1（无冲突） | ⬜ 未开始 | | |
 | M4 · 课表展示 | ⬜ 未开始 | | 视觉稿已定稿，照 `docs/mockups/` 实现 |
@@ -95,17 +94,24 @@
 | 2026-09-28 | #3 | 用户在真实 Win11 机器上首次执行 `npm run build:win`：`electron-vite build` 产物正常、`better-sqlite3` Windows 预编译二进制安装成功、Electron 31.6.0 下载完成并进入 `packaging` 阶段，卡在 `winCodeSign` 工具包解压的符号链接权限问题（已定位为 electron-builder 在 Windows 上的通病，与项目代码无关，修复方法见五、风险）。顺手把 `postinstall` 从 `electron-rebuild` 换成 electron-builder 官方推荐的 `install-app-deps`（其日志主动提示了这一点），移除多余的 `@electron/rebuild` 依赖 |
 | 2026-09-28 | #3（续） | 用户开启开发者模式后复测：`npm run build:win` 成功产出 exe；`npm run dev` 窗口正常弹出，工作台页面读写测试行正常（渲染进程→preload→主进程 IPC→better-sqlite3 全链路打通）。**M0 全部验收项通过，正式关闭**，转入 M1 |
 | 2026-09-28 | #3（续二） | 修正一个跨会话文档 bug：`PROGRESS.md`/`docs/06`/`docs/08` 里之前写死了具体分支名 `arena/01a0e81b-courseschedulingsystem`，但 Arena 每个新会话都会自动分配一条新分支（是上一个会话分支的延续），导致新会话按文档提示词去"切换"到旧分支名时失败。已把三处文档里的硬编码分支名全部改成"跟随当前会话分配的分支，不写死名字"，并在 08 的故障排查表里补了这条已知现象 |
+| 2026-09-29 | #4 | **M1 数据层与基础数据完成**。① 先发现本会话分支派生自纯文档提交、不含 M0 代码，M0 在同级分支 `arena/01a0e87b`（`d4102d6`）——用 `git merge --ff-only` 快进并入 M0，未切换分支。② `migrations/001_init.sql` 全量建表（**逐字取自 docs/03 §3**）；`002~004` 种子（三学段+默认作息、19 学科含配色、3 档 S1~S15 权重取自 docs/04 §1.3）；`migrate.ts` 迁移器（`schema_version` 记录、逐迁移单事务、`?raw` 把 SQL 内联进主进程产物）。③ 9 个 Repository + 全部 IPC（通道类型均声明于 `shared/types/ipc.ts`）。④ 页面：学校设置 / 学段与作息编辑器 / 年级班级（批量生成 20 班+命名模板预览）/ 学科（配色）/ 教师（任教学科多选）/ 教室（双容量）；通用 `EntityTable`（排序/搜索/分页/批量删除）；教师/班级/教室 Excel 导入导出（新增依赖 **exceljs**，已获用户同意）；toast/modal UI 基元。⑤ 已确认设计细节：初中默认作息=上午5+下午3=8 节/天、5 天制（docs 只给了小学 7、高中 13，初中空白，经用户确认）。**沙箱验证**：typecheck/lint/build 全绿；DDL+种子经真实 SQLite 引擎（Python sqlite3）校验、`?raw` SQL 确认已打进 `out/main/index.js`；新增 `repositories.test.ts` 覆盖迁移+种子+全 Repository（含 3 年级×20 班），因沙箱无法编译 better-sqlite3 原生模块而 `describe.skipIf` 跳过，**在有原生模块的机器/CI 会实际运行**。Electron 起窗口与真机手测留给用户 |
 
 ---
 
 ## 七、下个会话的第一条指令
 
-M0 已关闭，下一个里程碑是 M1。新会话直接说：
+M1 已关闭，下一个里程碑是 M2。新会话直接说：
 
 ```
 这是一个跨会话的项目。请先读 PROGRESS.md、docs/08-会话交接指南.md、
-docs/06-开发计划.md 中 M1 对应章节，然后 git log --oneline -10 看最近提交，
+docs/06-开发计划.md 中 M2 对应章节，然后 git log --oneline -10 看最近提交，
 复述这次要做什么、验收标准、注意事项，等我确认后再开始写代码。
 
-执行 M1 数据层与基础数据。DDL 直接用 docs/03-数据模型设计.md 第 3 章，一字不改。
+执行 M2 教学任务与规则。重点是 MatrixEditor 的 Excel 式键盘操作和
+RuleGrid 的拖刷交互，这两个决定录入效率。
 ```
+
+> 提醒：若新会话分支又缺上一步代码（本会话遇到过），先 `git ls-remote --heads origin`
+> 找到含最新代码的同级会话分支，`git merge --ff-only` 并入当前分支，**不要切换分支**。
+> 另：沙箱无法编译 `better-sqlite3` 原生模块，`connection.test.ts` 会因此报红、
+> `repositories.test.ts` 会自动 skip——这是沙箱网络限制的已知现象，在真机/CI 上正常。
