@@ -4,6 +4,8 @@ import { HomePage } from '@renderer/pages/Home/HomePage'
 import { PlaceholderPage } from '@renderer/pages/PlaceholderPage'
 import { SchoolSetupPage } from '@renderer/pages/Setup/SchoolSetupPage'
 import { BaseDataPage } from '@renderer/pages/BaseData/BaseDataPage'
+import { TeachingMatrixPage } from '@renderer/pages/TeachingMatrix/TeachingMatrixPage'
+import { RulesPage } from '@renderer/pages/Rules/RulesPage'
 
 export const router = createHashRouter([
   {
@@ -13,14 +15,8 @@ export const router = createHashRouter([
       { index: true, element: <HomePage /> },
       { path: 'setup', element: <SchoolSetupPage /> },
       { path: 'base-data', element: <BaseDataPage /> },
-      {
-        path: 'teaching-matrix',
-        element: <PlaceholderPage title="教学任务" milestone="M2 · 教学任务与规则" />
-      },
-      {
-        path: 'rules',
-        element: <PlaceholderPage title="排课规则" milestone="M2 · 教学任务与规则" />
-      },
+      { path: 'teaching-matrix', element: <TeachingMatrixPage /> },
+      { path: 'rules', element: <RulesPage /> },
       {
         path: 'scheduling',
         element: <PlaceholderPage title="开始排课" milestone="M3 · 排课引擎 v1" />
