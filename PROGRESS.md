@@ -2,7 +2,7 @@
 
 > **本文件是项目状态的唯一事实来源（Single Source of Truth）。**
 > 每个会话开始时必须先读本文件；每个会话结束前必须更新本文件并提交。
-> 最后更新：2026-09-29 · **M1 已完成并追加收尾增强**（测试数据种子脚本、班主任编辑/批量指定、固定教室保护修复）。沙箱侧：typecheck/lint/build 全绿，DDL 与迁移经真实 SQLite 引擎校验；集成测试在有原生模块的机器/CI 上跑，沙箱因网络限制自动 skip。分支 tip `1caa1b9`
+> 最后更新：2026-09-29 · **M2 教学任务与规则已完成**（教学任务矩阵 + 四层规则网格 + 学科规则 + 预排锁定 + 约束组 + SolverInput 组装与自检 + `npm run seed:m2` 示范初中验收数据）。沙箱侧：typecheck/lint/build/prettier 全绿，单测 49 条纯逻辑用例通过；迁移 005、5 个 Repository 的真实 SQL、种子脚本与 `validateSolverInput` 均经真实 SQLite 引擎跑通（见变更日志 #6 的验证手法）。Electron 起窗口与 UI 手测留待用户真机。分支 tip `ca39759`
 
 ---
 
@@ -10,12 +10,12 @@
 
 | 项 | 值 |
 |---|---|
-| **当前阶段** | **M1 数据层与基础数据已完成** |
-| **下一个里程碑** | **M2 · 教学任务与规则** |
-| **工作分支** | 由 Arena 按会话自动分配（形如 `arena/xxxxxxxx-courseschedulingsystem`）。⚠️ 本会话（#4）拿到的分支是从更早的**纯文档提交**派生的，**不含 M0 代码**；M0 代码在同级会话分支 `arena/01a0e87b`（tip `d4102d6`）。已在本分支上 `git merge --ff-only` 快进合并 M0 后再做 M1。若后续会话又遇到"分支缺上一步代码"，同样用 ff-merge 把上一会话分支并进来，**不要切换分支** |
+| **当前阶段** | **M2 教学任务与规则已完成** |
+| **下一个里程碑** | **M3 · 排课引擎 v1（无冲突）** |
+| **工作分支** | 由 Arena 按会话自动分配（形如 `arena/xxxxxxxx-courseschedulingsystem`）。⚠️ 会话 #4 拿到的分支是从更早的**纯文档提交**派生的，**不含 M0 代码**；M0 代码在同级会话分支 `arena/01a0e87b`（tip `d4102d6`）。已在本分支上 `git merge --ff-only` 快进合并 M0 后再做 M1。若后续会话又遇到"分支缺上一步代码"，同样用 ff-merge 把上一会话分支并进来，**不要切换分支** |
 | **PR** | https://github.com/hao123sc/CourseSchedulingSystem/pull/1 |
-| **代码行数** | ~5150 行 TS/TSX + 458 行 SQL（`src/**`，不含 node_modules） |
-| **仓库体积** | ~1.8MB（不含 node_modules/.git） |
+| **代码行数** | ~12810 行 TS/TSX + 488 行 SQL（`src/**`）+ 883 行种子脚本（`scripts/**`） |
+| **仓库体积** | ~2.2MB（不含 node_modules/out/.git） |
 
 ---
 
@@ -26,7 +26,7 @@
 | 设计阶段 | ✅ 完成 | 2026-09-28 | 8 份文档 + 3 份视觉稿 |
 | **M0 · 工程骨架** | ✅ 完成 | 2026-09-28 | 用户在 Win11 真机验证：`npm run dev` 弹窗正常、工作台读写测试行正常、`npm run build:win` 成功出 exe。沙箱侧验证记录见六、变更日志 #2/#3 |
 | **M1 · 数据层与基础数据** | ✅ 完成 | 2026-09-29 | 全量 DDL（`001_init.sql`，逐字取自 docs/03 §3）+ 迁移执行器 + 内置种子（3 学段/默认作息、19 学科含配色、3 档权重）+ 9 个 Repository + 全部 IPC + 页面（学校设置/学段作息/年级班级含批量生成 20 班/学科/教师/教室）+ 通用 `EntityTable` + 教师/班级/教室 Excel 导入导出（exceljs）。沙箱验证见变更日志 #4；Electron 起窗口/真机手测留待用户 |
-| M2 · 教学任务与规则 | ⬜ 未开始 | | |
+| **M2 · 教学任务与规则** | ✅ 完成 | 2026-09-29 | 迁移 `005_m2_rules.sql`（含 `ux_time_rule_global` 条件唯一索引）+ 5 个 Repository + 三组 IPC（teaching/rules/solver）+ `MatrixEditor`（Excel 式键盘 + 框选批量填充 + 行列合计超额标黄）+ 课时方案一键套用（内置 8 套，按国标推算，可预览改数字）+ 教师指派器与工作量看板 + `RuleGrid` 四层规则拖刷 + 学科规则 + 预排锁定 + 约束组 CRUD + `SolverInput` 纯类型/组装器/自检。验收数据 `npm run seed:m2`。沙箱验证见变更日志 #6；Electron 起窗口与 UI 手测留待用户 |
 | M3 · 排课引擎 v1（无冲突） | ⬜ 未开始 | | |
 | M4 · 课表展示 | ⬜ 未开始 | | 视觉稿已定稿，照 `docs/mockups/` 实现 |
 | M5 · 引擎 v2（质量优化） | ⬜ 未开始 | | |
@@ -77,6 +77,9 @@
 | 🟠 高 | UI 精致度不足 | M4 单独成里程碑，不与功能混做；严格照视觉稿与设计 token |
 | 🟡 中 | 240 班性能 | 分治 + 多起点并行 + 位图/计数器 + 增量评分 |
 | 🟡 中 | 范围蔓延 | M9 全部选做；M1~M8 完成即可交付 |
+| 🟡 中（新增 2026-09-29） | **`validateSolverInput` 的"容量估算"只是粗筛，不等于有解**。它只验证「班级需求节次 ≤ 可用时段」这类一维必要条件，不考虑教师/场地交叉耦合，因此 `ok=true` 仍可能排不出课 | M3 引擎必须自带真正的可行性判定与冲突归因；自检页的绿灯文案已写明"只是必要条件"，M3 起把引擎的不可行原因回填到同一张报告上 |
+| 🟡 中（新增 2026-09-29） | **规则数据量随作用域爆炸**：240 班 × 40 槽 = 9600 行/班级层，四层叠加后单学期可达数万行 | 已做两道防线：① `NORMAL` 视为"无规则"直接删行不落库；② 005 迁移补了 `ix_time_rule_lookup`/`ux_time_rule_global` 索引。M3 组装 `SolverInput` 时按 slot 建索引（`indexRulesBySlot`）一次性摊平，引擎内不得再做线性扫描 |
+| 🟢 已澄清（2026-09-29） | 曾怀疑 `xxxRepo.upsert` 的 `.run({ ...params, id })` 给 UPDATE 传了多余的命名参数（`semesterId` 未出现在 SET 子句里）会报错 | 查 `better-sqlite3` C++ 源码（`binder.lzz` → `better_sqlite3.cpp`）确认：它只遍历 SQL 里出现的占位符取值，**多余的对象 key 会被忽略**，仅缺失时才抛 `Missing named parameter`。故现有写法安全，**不要"顺手修"**。注意 Node 内置 `node:sqlite` 在这点上更严格，拿它做验证脚手架时需自行过滤 key |
 
 **易错点**：
 - 教师/班级占用用**位图**，场地占用必须用**计数器**（并发容量 >1），三者结构不同，勿混用
@@ -94,24 +97,35 @@
 | 2026-09-28 | #3 | 用户在真实 Win11 机器上首次执行 `npm run build:win`：`electron-vite build` 产物正常、`better-sqlite3` Windows 预编译二进制安装成功、Electron 31.6.0 下载完成并进入 `packaging` 阶段，卡在 `winCodeSign` 工具包解压的符号链接权限问题（已定位为 electron-builder 在 Windows 上的通病，与项目代码无关，修复方法见五、风险）。顺手把 `postinstall` 从 `electron-rebuild` 换成 electron-builder 官方推荐的 `install-app-deps`（其日志主动提示了这一点），移除多余的 `@electron/rebuild` 依赖 |
 | 2026-09-28 | #3（续） | 用户开启开发者模式后复测：`npm run build:win` 成功产出 exe；`npm run dev` 窗口正常弹出，工作台页面读写测试行正常（渲染进程→preload→主进程 IPC→better-sqlite3 全链路打通）。**M0 全部验收项通过，正式关闭**，转入 M1 |
 | 2026-09-28 | #3（续二） | 修正一个跨会话文档 bug：`PROGRESS.md`/`docs/06`/`docs/08` 里之前写死了具体分支名 `arena/01a0e81b-courseschedulingsystem`，但 Arena 每个新会话都会自动分配一条新分支（是上一个会话分支的延续），导致新会话按文档提示词去"切换"到旧分支名时失败。已把三处文档里的硬编码分支名全部改成"跟随当前会话分配的分支，不写死名字"，并在 08 的故障排查表里补了这条已知现象 |
-| 2026-09-29 | #5 | **M1 收尾增强（非里程碑新增功能，用户临时追加）**。① 测试数据脚本 `scripts/seed-test-data.cjs` + `npm run seed:test`（幂等；xxx中学/完全中学/6 年级×20 班=120 班每班 45 人/田径场并发 5/200 名教师 T001–T200 各配 1 学科/每班一间同名专属普通教室并设为固定教室 home_room/为 120 个班各指定一名班主任 T001.. 依次一师一班）。修过一个路径 bug（改用 `__dirname` 定位项目根，避免 `electron scripts/xx.cjs` 直跑时 `app.getAppPath()` 解析到 `scripts/` 导致 ENOENT）。② UI：`GradeClassTab` 班级编辑弹窗新增「班主任」下拉；修复编辑班级时因未回传 `homeRoomId` 导致固定教室被 upsert 清空的 bug（现表单初始化并回传 `homeRoomId`/`headTeacherId`）；表格新增班主任列。③ `EntityTable` 新增通用 `bulkActions` 渲染插槽（选中行后触发自定义批量操作），年级班级页据此支持「批量指定/清除班主任」。全部经 typecheck/lint/build/prettier 校验；种子逻辑经 Python sqlite3 跑真实迁移验证（120 班全部分配不同班主任、FK 无异常、重复运行加量为 0）。分支 tip `1caa1b9` |\n| 2026-09-29 | #4 | **M1 数据层与基础数据完成**。① 先发现本会话分支派生自纯文档提交、不含 M0 代码，M0 在同级分支 `arena/01a0e87b`（`d4102d6`）——用 `git merge --ff-only` 快进并入 M0，未切换分支。② `migrations/001_init.sql` 全量建表（**逐字取自 docs/03 §3**）；`002~004` 种子（三学段+默认作息、19 学科含配色、3 档 S1~S15 权重取自 docs/04 §1.3）；`migrate.ts` 迁移器（`schema_version` 记录、逐迁移单事务、`?raw` 把 SQL 内联进主进程产物）。③ 9 个 Repository + 全部 IPC（通道类型均声明于 `shared/types/ipc.ts`）。④ 页面：学校设置 / 学段与作息编辑器 / 年级班级（批量生成 20 班+命名模板预览）/ 学科（配色）/ 教师（任教学科多选）/ 教室（双容量）；通用 `EntityTable`（排序/搜索/分页/批量删除）；教师/班级/教室 Excel 导入导出（新增依赖 **exceljs**，已获用户同意）；toast/modal UI 基元。⑤ 已确认设计细节：初中默认作息=上午5+下午3=8 节/天、5 天制（docs 只给了小学 7、高中 13，初中空白，经用户确认）。**沙箱验证**：typecheck/lint/build 全绿；DDL+种子经真实 SQLite 引擎（Python sqlite3）校验、`?raw` SQL 确认已打进 `out/main/index.js`；新增 `repositories.test.ts` 覆盖迁移+种子+全 Repository（含 3 年级×20 班），因沙箱无法编译 better-sqlite3 原生模块而 `describe.skipIf` 跳过，**在有原生模块的机器/CI 会实际运行**。Electron 起窗口与真机手测留给用户 |
+| 2026-09-29 | #5 | **M1 收尾增强（非里程碑新增功能，用户临时追加）**。① 测试数据脚本 `scripts/seed-test-data.cjs` + `npm run seed:test`（幂等；xxx中学/完全中学/6 年级×20 班=120 班每班 45 人/田径场并发 5/200 名教师 T001–T200 各配 1 学科/每班一间同名专属普通教室并设为固定教室 home_room/为 120 个班各指定一名班主任 T001.. 依次一师一班）。修过一个路径 bug（改用 `__dirname` 定位项目根，避免 `electron scripts/xx.cjs` 直跑时 `app.getAppPath()` 解析到 `scripts/` 导致 ENOENT）。② UI：`GradeClassTab` 班级编辑弹窗新增「班主任」下拉；修复编辑班级时因未回传 `homeRoomId` 导致固定教室被 upsert 清空的 bug（现表单初始化并回传 `homeRoomId`/`headTeacherId`）；表格新增班主任列。③ `EntityTable` 新增通用 `bulkActions` 渲染插槽（选中行后触发自定义批量操作），年级班级页据此支持「批量指定/清除班主任」。全部经 typecheck/lint/build/prettier 校验；种子逻辑经 Python sqlite3 跑真实迁移验证（120 班全部分配不同班主任、FK 无异常、重复运行加量为 0）。分支 tip `1caa1b9` |
+| 2026-09-29 | #4 | **M1 数据层与基础数据完成**。① 先发现本会话分支派生自纯文档提交、不含 M0 代码，M0 在同级分支 `arena/01a0e87b`（`d4102d6`）——用 `git merge --ff-only` 快进并入 M0，未切换分支。② `migrations/001_init.sql` 全量建表（**逐字取自 docs/03 §3**）；`002~004` 种子（三学段+默认作息、19 学科含配色、3 档 S1~S15 权重取自 docs/04 §1.3）；`migrate.ts` 迁移器（`schema_version` 记录、逐迁移单事务、`?raw` 把 SQL 内联进主进程产物）。③ 9 个 Repository + 全部 IPC（通道类型均声明于 `shared/types/ipc.ts`）。④ 页面：学校设置 / 学段与作息编辑器 / 年级班级（批量生成 20 班+命名模板预览）/ 学科（配色）/ 教师（任教学科多选）/ 教室（双容量）；通用 `EntityTable`（排序/搜索/分页/批量删除）；教师/班级/教室 Excel 导入导出（新增依赖 **exceljs**，已获用户同意）；toast/modal UI 基元。⑤ 已确认设计细节：初中默认作息=上午5+下午3=8 节/天、5 天制（docs 只给了小学 7、高中 13，初中空白，经用户确认）。**沙箱验证**：typecheck/lint/build 全绿；DDL+种子经真实 SQLite 引擎（Python sqlite3）校验、`?raw` SQL 确认已打进 `out/main/index.js`；新增 `repositories.test.ts` 覆盖迁移+种子+全 Repository（含 3 年级×20 班），因沙箱无法编译 better-sqlite3 原生模块而 `describe.skipIf` 跳过，**在有原生模块的机器/CI 会实际运行**。Electron 起窗口与真机手测留给用户 |
+| 2026-09-29 | #6 | **M2 教学任务与规则完成**。① 数据层：迁移 `005_m2_rules.sql`（查询索引 + 条件唯一索引 `ux_time_rule_global`，修掉原 `ux_time_rule` 因 `scope_id` 可空导致 global 规则可重复插入的洞）；5 个 Repository（`teachingTask`/`timeRule`/`fixedLesson`/`subjectRule`/`constraintGroup`）；`solverInputService` 组装 `SolverInput` 快照 + `checkSolverInput` 自检；三组 IPC（`teaching:*`/`timeRule:*`/`subjectRule:*`/`fixedLesson:*`/`constraintGroup:*`/`solver:buildInput`）。② 共享层：`shared/curriculumPresets.ts` 内置 8 套课时方案（义务教育课程方案 2022 版推算小学两段与初中三段、普通高中课程方案 2017 年版 2020 修订按必修学分折算），学科按**名称**匹配、匹配不上原样回报不静默丢弃；`shared/constraints/{ruleValue,fixedLesson}.ts` 承载四层规则合并与预排冲突判定（**引擎与渲染端共用的唯一一份**）。③ 引擎侧只落纯类型与纯校验：`solver/model/types.ts` + `validate.ts`（零 Node/Electron 依赖，18 种 issue code），Solution/Assignment 等求解侧建模留给 M3。④ 渲染层：教学任务页（`MatrixEditor` 方向键/Tab/Enter/F2/Ctrl+D 向下填充/Ctrl+C+V 整行复制/Shift+方向框选批量填充、行列合计、行合计超学段周总节次整行标黄；课时方案一键套用可预览改数字；教师指派器只列任教该科教师且超工作量者标红置底；右侧工作量看板实时预警）、排课规则页五个 Tab（`RuleGrid` 拖刷调色 + 五种作用域切换 + 分段分隔 + 已设规则数 + 清空/复制到同学科教师、学科规则、预排锁定、约束组、输入自检）。⑤ 验收数据：`npm run seed:m2`（`scripts/seed-m2-demo.cjs`，幂等）铺出示范初中 60 班 / 121 名教师 / 780 条教学任务 1880 节 / 142 条四层规则 / 63 条预排 / 3 个约束组。**沙箱验证手法（新）**：因无法编译 `better-sqlite3` 原生模块，改用 Node 22 内置 `node:sqlite` 写了一次性脚手架（`/tmp`，已删），**只替换 sqlite 驱动**，直接跑真实的迁移 001~005、真实种子脚本、真实 5 个 Repository、真实 `solverInputService` 与 `validateSolverInput`：repo 断言 41 条全过，种子两次运行计数完全一致（幂等），最终 `validateSolverInput` 返回 `ok=true`、**零 issue**，即"数据可完整读出为 SolverInput"验收达成。过程中借此抓到并修掉 3 个种子脚本真 bug（教师池按整班课时不可拆分重算、不足时就地扩招 → 零未指派任务；连堂改挂在语文；班会占位与初三禁排时段撞格）。typecheck/lint/build/prettier 全绿，`npx vitest run` 49 条纯逻辑用例通过（`connection.test.ts` 因缺原生模块报红、`repositories.test.ts`/`m2Repositories.test.ts` 自动 skip，均为沙箱已知现象）。分支 tip `ca39759` |
 
 ---
 
 ## 七、下个会话的第一条指令
 
-M1 已关闭，下一个里程碑是 M2。新会话直接说：
+M2 已关闭，下一个里程碑是 M3。新会话直接说：
 
 ```
 这是一个跨会话的项目。请先读 PROGRESS.md、docs/08-会话交接指南.md、
-docs/06-开发计划.md 中 M2 对应章节，然后 git log --oneline -10 看最近提交，
-复述这次要做什么、验收标准、注意事项，等我确认后再开始写代码。
+docs/04-排课算法设计.md 与 docs/06-开发计划.md 中 M3 对应章节，
+然后 git log --oneline -10 看最近提交，复述这次要做什么、验收标准、
+注意事项，等我确认后再开始写代码。
 
-执行 M2 教学任务与规则。重点是 MatrixEditor 的 Excel 式键盘操作和
-RuleGrid 的拖刷交互，这两个决定录入效率。
+执行 M3 排课引擎 v1（无冲突）。输入已经就绪：主进程 solverInputService
+能把整个学期组装成 SolverInput 快照，src/solver/model/types.ts 是它的纯类型，
+validate.ts 是入口自检；用 npm run seed:m2 可以一键铺出示范初中的验收数据
+（60 班 / 780 条教学任务 / 142 条四层规则 / 63 条预排 / 3 个约束组）。
+先把 D3 定的 AC-3 预处理 → DSATUR 构造这两段做出来，目标是
+H1~H11 硬约束零违反、能跑完 60 班，软约束优化留给 M5。
 ```
 
-> 提醒：若新会话分支又缺上一步代码（本会话遇到过），先 `git ls-remote --heads origin`
-> 找到含最新代码的同级会话分支，`git merge --ff-only` 并入当前分支，**不要切换分支**。
-> 另：沙箱无法编译 `better-sqlite3` 原生模块，`connection.test.ts` 会因此报红、
-> `repositories.test.ts` 会自动 skip——这是沙箱网络限制的已知现象，在真机/CI 上正常。
+> 提醒：
+> 1. 若新会话分支缺上一步代码，先 `git ls-remote --heads origin` 找到含最新代码的
+>    同级会话分支，`git merge --ff-only` 并入当前分支，**不要切换分支**。
+> 2. 沙箱无法编译 `better-sqlite3` 原生模块：`connection.test.ts` 会报红、
+>    `repositories.test.ts` / `m2Repositories.test.ts` 会自动 skip——已知现象，真机/CI 正常。
+>    M3 的引擎代码是纯 TS 零 IO，**不受这条限制，单测必须真跑真绿**。
+> 3. `src/solver/**` 禁止 import Electron/Node 模块（worker 入口除外）；
+>    冲突判定逻辑只有 `src/shared/constraints` 一份，引擎直接复用，不要另写一套。
