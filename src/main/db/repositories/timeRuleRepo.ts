@@ -1,5 +1,10 @@
 import { getDb } from '../connection'
-import type { RuleScopeRef, RuleScopeSummary, TimeRule, TimeRulePatch } from '@shared/types/entities'
+import type {
+  RuleScopeRef,
+  RuleScopeSummary,
+  TimeRule,
+  TimeRulePatch
+} from '@shared/types/entities'
 import type { RuleScopeType, RuleValue } from '@shared/domain'
 
 interface RuleRow {
@@ -43,7 +48,9 @@ export const timeRuleRepo = {
   /** 读整个学期的全部规则（组装 SolverInput 用） */
   listBySemester(semesterId: number): TimeRule[] {
     const rows = getDb()
-      .prepare('SELECT * FROM time_rule WHERE semester_id = ? ORDER BY scope_type, scope_id, slot_id')
+      .prepare(
+        'SELECT * FROM time_rule WHERE semester_id = ? ORDER BY scope_type, scope_id, slot_id'
+      )
       .all(semesterId) as RuleRow[]
     return rows.map(toEntity)
   },

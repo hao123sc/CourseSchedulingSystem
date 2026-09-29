@@ -48,7 +48,10 @@ export const subjectRuleRepo = {
   },
 
   /** 覆盖式设置某学科的可用专用场地 */
-  setClassrooms(subjectId: number, bindings: Omit<SubjectClassroom, 'subjectId'>[]): SubjectClassroom[] {
+  setClassrooms(
+    subjectId: number,
+    bindings: Omit<SubjectClassroom, 'subjectId'>[]
+  ): SubjectClassroom[] {
     const db = getDb()
     const run = db.transaction(() => {
       db.prepare('DELETE FROM subject_classroom WHERE subject_id = ?').run(subjectId)

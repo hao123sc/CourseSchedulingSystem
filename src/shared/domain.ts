@@ -123,8 +123,16 @@ export type RuleScopeType = (typeof RULE_SCOPE_TYPES)[number]['value']
 
 /** 约束组类型（docs/03 §3.6 constraint_group.group_type） */
 export const GROUP_TYPES = [
-  { value: 'teacher_mutex', label: '教师互斥', hint: '组内教师不得排在同一时段（如夫妻档、跨校兼课）' },
-  { value: 'subject_mutex', label: '学科互斥', hint: '组内学科不得在同一时段开课（如共用同一批专用教室）' },
+  {
+    value: 'teacher_mutex',
+    label: '教师互斥',
+    hint: '组内教师不得排在同一时段（如夫妻档、跨校兼课）'
+  },
+  {
+    value: 'subject_mutex',
+    label: '学科互斥',
+    hint: '组内学科不得在同一时段开课（如共用同一批专用教室）'
+  },
   { value: 'merge', label: '合班拼合', hint: '组内教学任务合并成一节课，必须同时段同教师' },
   { value: 'follow', label: '跟随', hint: '组内任务尽量排在相邻时段或同一天' },
   { value: 'simultaneous', label: '同时上课', hint: '组内任务必须排在同一时段（如年级统一活动）' }

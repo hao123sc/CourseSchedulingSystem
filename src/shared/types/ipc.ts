@@ -166,11 +166,7 @@ export interface IpcApi {
     patches: TimeRulePatch[]
   ) => TimeRule[]
   'timeRule:clearScope': (semesterId: number, scope: RuleScopeRef) => number
-  'timeRule:copyScope': (
-    semesterId: number,
-    from: RuleScopeRef,
-    targets: RuleScopeRef[]
-  ) => number
+  'timeRule:copyScope': (semesterId: number, from: RuleScopeRef, targets: RuleScopeRef[]) => number
   'timeRule:summary': (semesterId: number) => RuleScopeSummary[]
 
   // ---- 学科规则（M2） ----

@@ -53,8 +53,7 @@ export const constraintGroupRepo = {
 
   get(id: number): ConstraintGroup | null {
     const row = getDb().prepare('SELECT * FROM constraint_group WHERE id = ?').get(id) as
-      | GroupRow
-      | undefined
+      GroupRow | undefined
     if (!row) return null
     return toEntity(row, loadMembers([id]).get(id) ?? [])
   },

@@ -49,8 +49,7 @@ export const teachingTaskRepo = {
 
   get(id: number): TeachingTask | null {
     const row = getDb().prepare('SELECT * FROM teaching_task WHERE id = ?').get(id) as
-      | TaskRow
-      | undefined
+      TaskRow | undefined
     return row ? toEntity(row) : null
   },
 
@@ -101,8 +100,7 @@ export const teachingTaskRepo = {
         'SELECT * FROM teaching_task WHERE semester_id=? AND class_id=? AND subject_id=? AND week_mode=?'
       )
       .get(params.semesterId, params.classId, params.subjectId, params.weekMode) as
-      | TaskRow
-      | undefined
+      TaskRow | undefined
     return toEntity(row as TaskRow)
   },
 
@@ -257,8 +255,7 @@ export const teachingTaskRepo = {
       for (const c of classRows) {
         for (const r of resolved) {
           const existing = selectOne.get(params.semesterId, c.id, r.subjectId) as
-            | { id: number; weekly_periods: number }
-            | undefined
+            { id: number; weekly_periods: number } | undefined
           if (!existing) {
             ins.run(params.semesterId, c.id, r.subjectId, r.periods)
             created += 1

@@ -214,8 +214,7 @@ export function validateSolverInput(input: SolverInput): SolverInputReport {
     let usable = 0
     for (const s of allTeaching) {
       const hits = (bySlot.get(s.id) ?? []).filter(
-        (r) =>
-          r.scopeType === 'global' || (r.scopeType === 'teacher' && r.scopeId === teacher.id)
+        (r) => r.scopeType === 'global' || (r.scopeType === 'teacher' && r.scopeId === teacher.id)
       )
       if (mergeRuleValues(hits) !== 'FORBIDDEN') usable += 1
     }

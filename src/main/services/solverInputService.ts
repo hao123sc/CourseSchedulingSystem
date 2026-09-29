@@ -28,13 +28,12 @@ export function buildSolverInput(semesterId: number, weightProfileCode = 'balanc
   const db = getDb()
 
   const semester = db.prepare('SELECT id, name FROM semester WHERE id = ?').get(semesterId) as
-    | { id: number; name: string }
-    | undefined
+    { id: number; name: string } | undefined
 
   // ── 权重档位 ──
-  const wp = db.prepare('SELECT code, payload FROM weight_profile WHERE code = ?').get(
-    weightProfileCode
-  ) as { code: string; payload: string } | undefined
+  const wp = db
+    .prepare('SELECT code, payload FROM weight_profile WHERE code = ?')
+    .get(weightProfileCode) as { code: string; payload: string } | undefined
   let weights: Record<string, number> = {}
   if (wp) {
     try {
@@ -212,8 +211,7 @@ export function buildSolverInput(semesterId: number, weightProfileCode = 'balanc
     needSpecialRoom: s.need_special_room === 1,
     dailyMax: s.daily_max,
     weekSpread: (s.week_spread === 'concentrate' ? 'concentrate' : 'spread') as
-      | 'spread'
-      | 'concentrate',
+      'spread' | 'concentrate',
     allowedRooms: (subjectRooms.get(s.id) ?? []).sort((a, b) => b.priority - a.priority)
   }))
 

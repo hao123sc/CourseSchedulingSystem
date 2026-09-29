@@ -70,8 +70,7 @@ export const fixedLessonRepo = {
 
   get(id: number): FixedLesson | null {
     const row = getDb().prepare('SELECT * FROM fixed_lesson WHERE id = ?').get(id) as
-      | FixedRow
-      | undefined
+      FixedRow | undefined
     return row ? toEntity(row) : null
   },
 
