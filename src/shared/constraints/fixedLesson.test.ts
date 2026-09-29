@@ -90,16 +90,16 @@ describe('预排锁定冲突判定（H7 录入守门）', () => {
     expect(ok.filter((c) => c.kind === 'room')).toHaveLength(0)
 
     // 整年级(3 班) + 1 个班 = 4 个班位，恰好占满
-    const full = detectFixedLessonConflicts(
-      [f({ gradeId: 1, classroomId: 900, slotId: 6 })],
-      ctx
-    )
+    const full = detectFixedLessonConflicts([f({ gradeId: 1, classroomId: 900, slotId: 6 })], ctx)
     expect(full.filter((c) => c.kind === 'room')).toHaveLength(0)
   })
 
   it('普通教室并发=1，两个班同时段抢同一间 → room 冲突', () => {
     const out = detectFixedLessonConflicts(
-      [f({ classId: 11, classroomId: 901, slotId: 4 }), f({ classId: 12, classroomId: 901, slotId: 4 })],
+      [
+        f({ classId: 11, classroomId: 901, slotId: 4 }),
+        f({ classId: 12, classroomId: 901, slotId: 4 })
+      ],
       ctx
     )
     const room = out.find((c) => c.kind === 'room')
@@ -122,5 +122,87 @@ describe('预排锁定冲突判定（H7 录入守门）', () => {
     const existing = [f({ id: 1, classId: 11, slotId: 1 })]
     const out = checkFixedLessonAgainst(f({ id: 1, classId: 11, slotId: 1 }), existing, ctx)
     expect(out).toHaveLength(0)
+  })
+})
+
+describe('kind=block 仅占用（migration 006）', () => {
+  const blk = (p: Partial<FixedLessonLike>): FixedLessonLike => f({ kind: 'block', ...p })
+
+  it('只占教室、不绑班级 —— 合法', () => {
+    expect(detectFixedLessonConflicts([blk({ classroomId: 901, slotId: 1 })], ctx)).toHaveLength(0)
+  })
+
+  it('只占教师、不绑班级 —— 合法', () => {
+    expect(detectFixedLessonConflicts([blk({ teacherId: 7, slotId: 1 })], ctx)).toHaveLength(0)
+  })
+
+  it('既不占教师也不占教室 → invalid', () => {
+    const out = detectFixedLessonConflicts([blk({ slotId: 1 })], ctx)
+    expect(out).toHaveLength(1)
+    expect(out[0].kind).toBe('invalid')
+    expect(out[0].message).toContain('至少要指定')
+  })
+
+  it('仅占用却绑了班级 → invalid', () => {
+    const out = detectFixedLessonConflicts([blk({ classId: 11, classroomId: 901 })], ctx)
+    expect(out.some((c) => c.kind === 'invalid' && c.message.includes('不产生课'))).toBe(true)
+  })
+
+  it('不占班级：整年级预排课与同格的教室 block 互不干扰班级维度', () => {
+    const out = detectFixedLessonConflicts(
+      [blk({ classroomId: 901, slotId: 9 }), f({ gradeId: 1, slotId: 9 })],
+      ctx
+    )
+    expect(out.filter((c) => c.kind === 'class')).toHaveLength(0)
+  })
+
+  it('场地 block 独占：并发 4 的田径场被占用后，一个班也排不进去', () => {
+    const out = detectFixedLessonConflicts(
+      [blk({ classroomId: 900, slotId: 4 }), f({ classId: 11, classroomId: 900, slotId: 4 })],
+      ctx
+    )
+    const room = out.find((c) => c.kind === 'room')
+    expect(room).toBeDefined()
+    expect(room?.message).toContain('维护/外借')
+    expect(room?.indexes).toEqual([0, 1])
+  })
+
+  it('场地 block 不影响其它时段与其它场地', () => {
+    const out = detectFixedLessonConflicts(
+      [
+        blk({ classroomId: 900, slotId: 4 }),
+        f({ classId: 11, classroomId: 900, slotId: 5 }),
+        f({ classId: 12, classroomId: 901, slotId: 4 })
+      ],
+      ctx
+    )
+    expect(out).toHaveLength(0)
+  })
+
+  it('教师 block 挡住同一教师的预排课，文案点明原因', () => {
+    const out = detectFixedLessonConflicts(
+      [blk({ teacherId: 7, slotId: 2 }), f({ classId: 11, teacherId: 7, slotId: 2 })],
+      ctx
+    )
+    const t = out.find((c) => c.kind === 'teacher')
+    expect(t).toBeDefined()
+    expect(t?.message).toContain('开会')
+  })
+
+  it('增量校验：往被占用的机房里塞课会被当场拦下', () => {
+    const existing = [blk({ id: 1, classroomId: 901, slotId: 3 })]
+    const out = checkFixedLessonAgainst(
+      f({ classId: 11, classroomId: 901, slotId: 3 }),
+      existing,
+      ctx
+    )
+    expect(out.some((c) => c.kind === 'room')).toBe(true)
+  })
+
+  it('未声明 kind 的历史数据仍按预排课判定', () => {
+    const out = detectFixedLessonConflicts([f({ classroomId: 901, slotId: 3 })], ctx)
+    expect(out).toHaveLength(1)
+    expect(out[0].kind).toBe('invalid')
+    expect(out[0].message).toContain('预排课必须指定')
   })
 })

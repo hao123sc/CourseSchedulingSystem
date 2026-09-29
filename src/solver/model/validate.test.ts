@@ -113,8 +113,7 @@ function baseInput(): SolverInput {
   }
 }
 
-const codes = (input: SolverInput): string[] =>
-  validateSolverInput(input).issues.map((i) => i.code)
+const codes = (input: SolverInput): string[] => validateSolverInput(input).issues.map((i) => i.code)
 
 describe('SolverInput 自检', () => {
   it('齐备的输入通过，统计数字正确', () => {
@@ -157,6 +156,7 @@ describe('SolverInput 自检', () => {
     input.fixedLessons = [
       {
         id: 1,
+        kind: 'lesson',
         classId: 11,
         gradeId: null,
         subjectId: null,
@@ -241,6 +241,7 @@ describe('SolverInput 自检', () => {
     input.fixedLessons = [
       {
         id: 1,
+        kind: 'lesson',
         classId: 11,
         gradeId: null,
         subjectId: null,

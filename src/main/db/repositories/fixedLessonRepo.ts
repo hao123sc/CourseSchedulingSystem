@@ -1,4 +1,5 @@
 import { getDb } from '../connection'
+import type { FixedLessonKind } from '@shared/domain'
 import type { FixedLesson, FixedLessonInput } from '@shared/types/entities'
 import {
   detectFixedLessonConflicts,
@@ -9,6 +10,7 @@ import {
 interface FixedRow {
   id: number
   semester_id: number
+  kind: FixedLessonKind
   class_id: number | null
   grade_id: number | null
   subject_id: number | null
@@ -22,6 +24,7 @@ function toEntity(r: FixedRow): FixedLesson {
   return {
     id: r.id,
     semesterId: r.semester_id,
+    kind: r.kind ?? 'lesson',
     classId: r.class_id,
     gradeId: r.grade_id,
     subjectId: r.subject_id,
@@ -76,11 +79,14 @@ export const fixedLessonRepo = {
 
   upsert(input: FixedLessonInput): FixedLesson {
     const db = getDb()
+    const kind: FixedLessonKind = input.kind ?? 'lesson'
+    // block 不产生课，班级维度必须留空，避免前端漏清字段时落出自相矛盾的行
     const params = {
       semesterId: input.semesterId,
-      classId: input.classId ?? null,
-      gradeId: input.gradeId ?? null,
-      subjectId: input.subjectId ?? null,
+      kind,
+      classId: kind === 'block' ? null : (input.classId ?? null),
+      gradeId: kind === 'block' ? null : (input.gradeId ?? null),
+      subjectId: kind === 'block' ? null : (input.subjectId ?? null),
       teacherId: input.teacherId ?? null,
       classroomId: input.classroomId ?? null,
       slotId: input.slotId,
@@ -88,8 +94,9 @@ export const fixedLessonRepo = {
     }
     if (input.id != null) {
       db.prepare(
-        `UPDATE fixed_lesson SET class_id=@classId, grade_id=@gradeId, subject_id=@subjectId,
-           teacher_id=@teacherId, classroom_id=@classroomId, slot_id=@slotId, label=@label
+        `UPDATE fixed_lesson SET kind=@kind, class_id=@classId, grade_id=@gradeId,
+           subject_id=@subjectId, teacher_id=@teacherId, classroom_id=@classroomId,
+           slot_id=@slotId, label=@label
          WHERE id=@id`
       ).run({ ...params, id: input.id })
       return this.get(input.id) as FixedLesson
@@ -97,8 +104,9 @@ export const fixedLessonRepo = {
     const info = db
       .prepare(
         `INSERT INTO fixed_lesson
-           (semester_id, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label)
-         VALUES (@semesterId, @classId, @gradeId, @subjectId, @teacherId, @classroomId, @slotId, @label)`
+           (semester_id, kind, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label)
+         VALUES (@semesterId, @kind, @classId, @gradeId, @subjectId, @teacherId, @classroomId,
+                 @slotId, @label)`
       )
       .run(params)
     return this.get(Number(info.lastInsertRowid)) as FixedLesson
@@ -113,17 +121,20 @@ export const fixedLessonRepo = {
     const db = getDb()
     const ins = db.prepare(
       `INSERT INTO fixed_lesson
-         (semester_id, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (semester_id, kind, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     const ids: number[] = []
     const run = db.transaction(() => {
       for (const i of inputs) {
+        const kind: FixedLessonKind = i.kind ?? 'lesson'
+        const blocked = kind === 'block'
         const info = ins.run(
           i.semesterId,
-          i.classId ?? null,
-          i.gradeId ?? null,
-          i.subjectId ?? null,
+          kind,
+          blocked ? null : (i.classId ?? null),
+          blocked ? null : (i.gradeId ?? null),
+          blocked ? null : (i.subjectId ?? null),
           i.teacherId ?? null,
           i.classroomId ?? null,
           i.slotId,

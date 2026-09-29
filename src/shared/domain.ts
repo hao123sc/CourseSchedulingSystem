@@ -121,6 +121,24 @@ export const RULE_SCOPE_TYPES = [
 ] as const
 export type RuleScopeType = (typeof RULE_SCOPE_TYPES)[number]['value']
 
+/**
+ * 预排锁定的两种语义（fixed_lesson.kind，migration 006）。
+ * lesson = 真的排了一节课；block = 只让资源不可用，不产生课。
+ */
+export const FIXED_LESSON_KINDS = [
+  {
+    value: 'lesson',
+    label: '预排课',
+    hint: '把某个班的某节课钉死在这一格，同时占用班级、教师和场地'
+  },
+  {
+    value: 'block',
+    label: '仅占用',
+    hint: '不绑班级，只让这位教师或这间教室在该时段不可用（维护、外借、开会）'
+  }
+] as const
+export type FixedLessonKind = (typeof FIXED_LESSON_KINDS)[number]['value']
+
 /** 约束组类型（docs/03 §3.6 constraint_group.group_type） */
 export const GROUP_TYPES = [
   {

@@ -3,6 +3,7 @@
  * 主进程 Repository 负责在 snake_case 行与这些类型之间转换，渲染层永远只见 camelCase。
  */
 import type {
+  FixedLessonKind,
   GroupHardness,
   GroupMemberType,
   GroupType,
@@ -346,6 +347,8 @@ export interface ConsecutiveApplyInput {
 export interface FixedLesson {
   id: number
   semesterId: number
+  /** lesson = 预排一节课（须绑班级/年级）；block = 仅占用教师或教室 */
+  kind: FixedLessonKind
   classId: number | null
   gradeId: number | null
   subjectId: number | null
@@ -357,6 +360,8 @@ export interface FixedLesson {
 export interface FixedLessonInput {
   id?: number
   semesterId: number
+  /** 省略时按 lesson 处理，与 migration 006 之前的行为一致 */
+  kind?: FixedLessonKind
   classId?: number | null
   gradeId?: number | null
   subjectId?: number | null

@@ -271,7 +271,7 @@ export function buildSolverInput(semesterId: number, weightProfileCode = 'balanc
   // ── 预排锁定 ──
   const fixedRows = db
     .prepare(
-      `SELECT id, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label
+      `SELECT id, kind, class_id, grade_id, subject_id, teacher_id, classroom_id, slot_id, label
          FROM fixed_lesson WHERE semester_id = ? ORDER BY slot_id, id`
     )
     .all(semesterId) as {
@@ -283,9 +283,11 @@ export function buildSolverInput(semesterId: number, weightProfileCode = 'balanc
     classroom_id: number | null
     slot_id: number
     label: string | null
+    kind: string
   }[]
   const fixedLessons: SolverFixedLesson[] = fixedRows.map((f) => ({
     id: f.id,
+    kind: f.kind === 'block' ? 'block' : 'lesson',
     classId: f.class_id,
     gradeId: f.grade_id,
     subjectId: f.subject_id,

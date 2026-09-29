@@ -114,6 +114,12 @@ export interface SolverTimeRule {
 
 export interface SolverFixedLesson {
   id: number
+  /**
+   * lesson = 占「班级 + 教师 + 场地」；
+   * block  = 不产生课，只把 teacher/classroom 从该时段的可用池里摘掉，
+   *          且占场地时独占全部并发容量。
+   */
+  kind: 'lesson' | 'block'
   classId: number | null
   gradeId: number | null
   subjectId: number | null

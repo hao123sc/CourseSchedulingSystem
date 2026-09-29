@@ -5,12 +5,20 @@
  * 「同一教师分身」「场地班位超并发容量」这些一眼可见的矛盾，
  * 否则会在 M3 排课阶段变成无解诊断，教务不知道错在哪。
  *
+ * 两种语义（fixed_lesson.kind，migration 006）判定规则不同：
+ *   lesson —— 预排一节课，必须绑班级或整年级，占「班级 + 教师 + 场地」三份资源
+ *   block  —— 仅占用，不绑班级，至少占教师或教室之一；占场地时**独占**全部并发容量
+ *             （维护、外借针对整个场地，不是某个班位）
+ *
  * 禁止 import Electron / Node。
  */
+import type { FixedLessonKind } from '../domain'
 
 export interface FixedLessonLike {
   id?: number
-  /** 二选一：班级级占位 或 整年级占位 */
+  /** 省略按 'lesson' 处理，保持 migration 006 之前的行为 */
+  kind?: FixedLessonKind
+  /** lesson 时二选一：班级级占位 或 整年级占位；block 时两者都为 null */
   classId: number | null
   gradeId: number | null
   teacherId: number | null
@@ -39,8 +47,14 @@ export interface FixedLessonConflict {
   indexes: number[]
 }
 
-/** 展开为实际被占用的班级集合：年级级占位 = 该年级所有班 */
+/** 未显式声明 kind 的旧数据一律按预排课处理 */
+function kindOf(f: FixedLessonLike): FixedLessonKind {
+  return f.kind ?? 'lesson'
+}
+
+/** 展开为实际被占用的班级集合：年级级占位 = 该年级所有班；block 不占班级 */
 function expandClasses(f: FixedLessonLike, ctx: FixedLessonContext): number[] {
+  if (kindOf(f) === 'block') return []
   if (f.classId != null) return [f.classId]
   if (f.gradeId != null) return ctx.gradeClasses.get(f.gradeId) ?? []
   return []
@@ -56,13 +70,32 @@ export function detectFixedLessonConflicts(
 ): FixedLessonConflict[] {
   const conflicts: FixedLessonConflict[] = []
 
-  // 0. 基本合法性：必须指定班级或年级之一
+  // 0. 基本合法性：两种语义各自的最低要求
   lessons.forEach((f, i) => {
+    if (kindOf(f) === 'block') {
+      if (f.teacherId == null && f.classroomId == null) {
+        conflicts.push({
+          kind: 'invalid',
+          slotId: f.slotId,
+          message: '「仅占用」至少要指定一个被占用的对象：教师或教室',
+          indexes: [i]
+        })
+      }
+      if (f.classId != null || f.gradeId != null) {
+        conflicts.push({
+          kind: 'invalid',
+          slotId: f.slotId,
+          message: '「仅占用」不产生课，不能绑定班级或年级；要排课请改用「预排课」',
+          indexes: [i]
+        })
+      }
+      return
+    }
     if (f.classId == null && f.gradeId == null) {
       conflicts.push({
         kind: 'invalid',
         slotId: f.slotId,
-        message: '预排占位必须指定「班级」或「整年级」之一',
+        message: '预排课必须指定「班级」或「整年级」之一',
         indexes: [i]
       })
     }
@@ -102,33 +135,50 @@ export function detectFixedLessonConflicts(
   for (const [key, idxs] of teacherSeen) {
     if (idxs.length > 1) {
       const slotId = Number(key.split('#')[1])
+      const hasBlock = idxs.some((i) => kindOf(lessons[i]) === 'block')
       conflicts.push({
         kind: 'teacher',
         slotId,
-        message: '同一教师在该时段被安排了多个预排占位',
+        message: hasBlock
+          ? '该教师在这个时段已被标记为占用（开会/外出），不能再排预排课'
+          : '同一教师在该时段被安排了多个预排占位',
         indexes: idxs
       })
     }
   }
 
   // 3. 场地并发容量（H3）：普通教室 concurrent_capacity=1 时退化为独占
-  //    年级级占位按「占用的班数」计入班位消耗
-  const roomSeen = new Map<string, { idxs: number[]; used: number }>()
+  //    年级级占位按「占用的班数」计入班位消耗；
+  //    block（维护/外借）针对整个场地，直接吃满容量，使该场地在此时段彻底不可用
+  const roomSeen = new Map<string, { idxs: number[]; used: number; blocked: boolean }>()
   lessons.forEach((f, i) => {
     if (f.classroomId == null) return
     const key = `${f.classroomId}#${f.slotId}`
-    const used = Math.max(1, expandClasses(f, ctx).length)
+    const cap = ctx.roomConcurrency.get(f.classroomId) ?? 1
+    const isBlock = kindOf(f) === 'block'
+    const used = isBlock ? Math.max(1, cap) : Math.max(1, expandClasses(f, ctx).length)
     const cur = roomSeen.get(key)
     if (cur) {
       cur.idxs.push(i)
       cur.used += used
+      cur.blocked = cur.blocked || isBlock
     } else {
-      roomSeen.set(key, { idxs: [i], used })
+      roomSeen.set(key, { idxs: [i], used, blocked: isBlock })
     }
   })
   for (const [key, v] of roomSeen) {
     const [roomStr, slotStr] = key.split('#')
     const cap = ctx.roomConcurrency.get(Number(roomStr)) ?? 1
+    // 场地被标记占用后，同格再出现任何一条记录都是矛盾（哪怕容量够）
+    if (v.blocked && v.idxs.length > 1) {
+      conflicts.push({
+        kind: 'room',
+        slotId: Number(slotStr),
+        message: '该场地在这个时段已被标记为占用（维护/外借），不能再安排使用',
+        indexes: v.idxs
+      })
+      continue
+    }
     if (v.used > cap) {
       conflicts.push({
         kind: 'room',
