@@ -69,6 +69,7 @@ npm run build:linux   # Linux 机器上：产出 AppImage / 目录版
 npm run seed:test     # 只铺基础数据：学段作息 / 年级班级 / 学科 / 教师 / 教室 / 班主任
 npm run seed:m2       # 在此之上补齐教学任务 / 时段规则 / 学科规则 / 预排锁定 / 约束组
 #    两个脚本都幂等，可重复执行；基础数据共用 scripts/lib/demo-school.cjs 一份定义
+#    Windows 若仍看到乱码：先在终端敲一次 chcp 65001（脚本已会自动切，个别终端拦得住）
 ```
 
 **关于 Windows exe**：`electron-builder` 在打 Windows 包时会用 `rcedit` 给 exe 写图标/版本信息；
