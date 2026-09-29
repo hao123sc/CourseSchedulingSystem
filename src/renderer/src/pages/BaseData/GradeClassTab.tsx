@@ -23,6 +23,7 @@ export function GradeClassTab(): React.JSX.Element {
   const [gradeModal, setGradeModal] = useState<Grade | 'new' | null>(null)
   const [classModal, setClassModal] = useState<Klass | 'new' | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
+  const [bulkHead, setBulkHead] = useState<{ rows: Klass[]; clear: () => void } | null>(null)
 
   const semesterId = currentSemester?.id ?? null
 
@@ -191,6 +192,11 @@ export function GradeClassTab(): React.JSX.Element {
                 toast.success(`已删除 ${list.length} 个班级`)
                 void reloadClasses()
               }}
+              bulkActions={(rows, clear) => (
+                <Button variant="outline" size="sm" onClick={() => setBulkHead({ rows, clear })}>
+                  指定班主任（{rows.length}）
+                </Button>
+              )}
               toolbar={
                 <>
                   <Button
@@ -244,6 +250,18 @@ export function GradeClassTab(): React.JSX.Element {
           onClose={() => setClassModal(null)}
           onSaved={() => {
             setClassModal(null)
+            void reloadClasses()
+          }}
+        />
+      )}
+      {bulkHead && (
+        <BulkHeadTeacherModal
+          rows={bulkHead.rows}
+          teachers={teachers}
+          onClose={() => setBulkHead(null)}
+          onSaved={() => {
+            bulkHead.clear()
+            setBulkHead(null)
             void reloadClasses()
           }}
         />
@@ -485,6 +503,95 @@ function ClassEditModal({
           />
           走班虚拟教学班
         </label>
+      </div>
+    </Modal>
+  )
+}
+
+function BulkHeadTeacherModal({
+  rows,
+  teachers,
+  onClose,
+  onSaved
+}: {
+  rows: Klass[]
+  teachers: Teacher[]
+  onClose: () => void
+  onSaved: () => void
+}): React.JSX.Element {
+  const [teacherId, setTeacherId] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function save(): Promise<void> {
+    setBusy(true)
+    try {
+      // 逐个 upsert，保留各班原有字段（尤其 homeRoomId），仅更新班主任
+      await Promise.all(
+        rows.map((r) =>
+          api['class:upsert']({
+            id: r.id,
+            gradeId: r.gradeId,
+            name: r.name,
+            shortName: r.shortName ?? null,
+            studentCount: r.studentCount,
+            isVirtual: r.isVirtual,
+            homeRoomId: r.homeRoomId ?? null,
+            headTeacherId: teacherId
+          })
+        )
+      )
+      toast.success(
+        teacherId == null
+          ? `已清除 ${rows.length} 个班级的班主任`
+          : `已为 ${rows.length} 个班级指定班主任`
+      )
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="批量指定班主任"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            应用到 {rows.length} 个班级
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-[color:var(--text-secondary)]">
+          将为选中的{' '}
+          <span className="font-medium text-[color:var(--text-primary)]">{rows.length}</span>{' '}
+          个班级统一设置班主任：
+          <span className="ml-1">{rows.map((r) => r.name).join('、')}</span>
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <Label>班主任</Label>
+          <select
+            className="h-9 rounded-input border border-[color:var(--border-subtle)] bg-[color:var(--surface)] px-2 text-sm"
+            value={teacherId ?? ''}
+            onChange={(e) => setTeacherId(e.target.value === '' ? null : Number(e.target.value))}
+          >
+            <option value="">未指定（清除班主任）</option>
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.staffNo ? `（${t.staffNo}）` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </Modal>
   )

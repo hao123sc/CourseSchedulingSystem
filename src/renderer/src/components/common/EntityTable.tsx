@@ -22,6 +22,8 @@ interface EntityTableProps<T> {
   onEdit?: (row: T) => void
   onDelete?: (row: T) => void
   onDeleteMany?: (rows: T[]) => void
+  /** 选中行后展示的自定义批量操作（如批量指定班主任）。启用行选择需同时提供 onDeleteMany 或该项。 */
+  bulkActions?: (selectedRows: T[], clearSelection: () => void) => React.ReactNode
   pageSize?: number
   emptyText?: string
   /** 工具栏右侧插槽（新增 / 导入 / 导出等按钮） */
@@ -37,6 +39,7 @@ export function EntityTable<T>({
   onEdit,
   onDelete,
   onDeleteMany,
+  bulkActions,
   pageSize = 20,
   emptyText = '暂无数据',
   toolbar
@@ -103,9 +106,10 @@ export function EntityTable<T>({
     })
   }
 
-  const selectable = Boolean(onDeleteMany)
+  const selectable = Boolean(onDeleteMany || bulkActions)
   const hasActions = Boolean(onEdit || onDelete)
   const selectedRows = filtered.filter((r) => selected.has(rowKey(r)))
+  const clearSelection = (): void => setSelected(new Set())
 
   const alignCls = (a?: string): string =>
     a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left'
@@ -125,7 +129,8 @@ export function EntityTable<T>({
           />
         )}
         <div className="flex-1" />
-        {selectable && selectedRows.length > 0 && (
+        {selectedRows.length > 0 && bulkActions?.(selectedRows, clearSelection)}
+        {onDeleteMany && selectedRows.length > 0 && (
           <Button
             variant="outline"
             size="sm"
