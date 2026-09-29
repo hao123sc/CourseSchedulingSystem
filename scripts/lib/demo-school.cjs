@@ -19,13 +19,43 @@ const fs = require('fs')
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..')
 
-const MIGRATIONS = [
-  { version: 1, file: '001_init.sql' },
-  { version: 2, file: '002_seed_stages.sql' },
-  { version: 3, file: '003_seed_subjects.sql' },
-  { version: 4, file: '004_seed_weights.sql' },
-  { version: 5, file: '005_m2_rules.sql' }
-]
+const MIGRATIONS_DIR = path.join(PROJECT_ROOT, 'src', 'main', 'db', 'migrations')
+
+/**
+ * 迁移清单**扫描目录得来**，不手抄第二份。
+ *
+ * 这里原本是一份硬编码列表，与 src/main/db/migrations/index.ts 各写各的；
+ * 新增 006 时漏同步了这一侧，脚本建出来的库少一列，直到运行时才炸。
+ * 现在改为：文件名前缀即版本号（与 index.ts 的约定一致），并与 index.ts
+ * 声明的清单交叉校验，任何一侧漏登记都会在这里当场喊停。
+ */
+function loadMigrations() {
+  const files = fs
+    .readdirSync(MIGRATIONS_DIR)
+    .filter((f) => /^\d{3}_.+\.sql$/.test(f))
+    .sort()
+  const declared = new Set(
+    [
+      ...fs
+        .readFileSync(path.join(MIGRATIONS_DIR, 'index.ts'), 'utf-8')
+        .matchAll(/name:\s*'([^']+)'/g)
+    ].map((m) => m[1])
+  )
+  const onDisk = new Set(files.map((f) => f.replace(/\.sql$/, '')))
+  const missing = [...onDisk].filter((n) => !declared.has(n))
+  const extra = [...declared].filter((n) => !onDisk.has(n))
+  if (missing.length || extra.length) {
+    throw new Error(
+      '迁移清单不同步：' +
+        (missing.length ? `目录里有但 index.ts 未登记 → ${missing.join(', ')}；` : '') +
+        (extra.length ? `index.ts 登记了但目录里没有 → ${extra.join(', ')}；` : '') +
+        '请同步 src/main/db/migrations/index.ts'
+    )
+  }
+  return files.map((file) => ({ version: Number(file.slice(0, 3)), file }))
+}
+
+const MIGRATIONS = loadMigrations()
 
 /** 与 src/main/db/connection.ts 的 dev 分支一致：仓库根目录下 .local-data/data.db */
 function getDbPath(app) {
@@ -47,7 +77,7 @@ function runMigrations(db) {
       .map((r) => r.version)
   )
   const record = db.prepare('INSERT INTO schema_version (version) VALUES (?)')
-  const dir = path.join(PROJECT_ROOT, 'src', 'main', 'db', 'migrations')
+  const dir = MIGRATIONS_DIR
   for (const m of MIGRATIONS) {
     if (applied.has(m.version)) continue
     const sql = fs.readFileSync(path.join(dir, m.file), 'utf-8')
