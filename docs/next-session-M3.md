@@ -37,10 +37,18 @@
 
 已经就绪、不要重做的东西：
 - src/solver/model/types.ts —— SolverInput 纯类型，零 Node/Electron 依赖
-- src/solver/model/validate.ts —— 入口自检，18 种 issue code，返回 {ok, stats, issues}
-- src/main/services/solverInputService.ts —— 从库里组装整学期快照；IPC solver:buildInput / solver:inputSummary
-- src/shared/constraints/ —— 四层规则合并与预排冲突判定的**唯一一份**实现，引擎直接复用，禁止另写一套
+- src/solver/model/validate.ts —— 入口自检，19 种 issue code，返回 {ok, stats, issues}
+- src/main/services/solverInputService.ts —— 从库里组装整学期快照；IPC solver:buildInput / solver:checkInput
+- src/shared/constraints/ —— 四层规则合并、预排冲突判定、课时守恒的**唯一一份**实现，
+  引擎直接复用，禁止另写一套
 - npm run seed:m2 —— 一键铺验收数据（见下）
+
+开工前必须先搞懂「预排占位」的两种语义，否则会把已经钉死的课重复排一遍：
+- kind='lesson' 预排一节课：绑 class 或 grade，占「班级 + 教师 + 场地」三份资源，
+  **并且计入该班该科的周课时**。建模时这门课的待排节数 = weeklyPeriods − 已预排节数。
+- kind='block'  仅占用：不绑班级，至少占 teacher 或 classroom 之一，**不产生课**，
+  只把对应资源从该时段的可用池里摘掉；占场地时**独占全部并发容量**（维护/外借针对整个场地）。
+录入端已经挡住「预排超过周课时」，引擎可以假定 已预排节数 ≤ weeklyPeriods，但仍要扣减。
 
 约束（务必遵守）：
 - 只在本会话被分配到的那条 arena/*-courseschedulingsystem 分支上工作，不切换、不新建、不推到别的分支
@@ -49,7 +57,9 @@
 - 不产生零散临时文件；node_modules / 构建产物绝不入库；每步后 git status + du -sh 确认无残留
 - 引入文档未提及的新依赖必须先征得我同意
 - 文档没覆盖的空白或文档间矛盾先问我，不要自己拍板
-- 数据库如需变更一律新增 migration（007_ 起；006 已被预排锁定的 kind 列占用），不改历史迁移文件
+- 数据库如需变更一律新增 migration（007_ 起；006 已被预排锁定的 kind 列占用），不改历史迁移文件。
+  新迁移若 SQL 不幂等、或结构可能被外部工具破坏，要给它加 verify 结构断言，
+  并保证 SQL 能在「断言不成立」的状态下安全重放（见变更日志 #14 与 migrate.ts 注释）
 - src/solver/** 禁止 import Electron/Node 模块（worker 入口除外）
 
 收尾时：逐条报告 M3 验收项达成情况（含实测耗时与硬约束违反数），更新 PROGRESS.md
@@ -63,23 +73,42 @@
 ### 上个阶段交付了什么
 
 M2 已关闭（教学任务矩阵 / 课时方案一键套用 / 教师指派与工作量看板 / 四层规则网格 /
-学科规则 / 预排锁定 / 约束组 / SolverInput 组装与自检），此外本会话还补了一批工程设施：
+学科规则 / 预排锁定 / 约束组 / SolverInput 组装与自检）。M2 关闭后又补了一轮
+**预排锁定的三视角录入 + 课时守恒**（变更日志 #13~#16）：
 
-| 命令 | 用途 |
-|---|---|
-| `npm run seed:m2` | 铺示范高完中全量验收数据（120 班 / 1520 条任务 3900 节 / 373 条规则 / 186 条预排 / 3 约束组） |
-| `npm run seed:test` | 只铺基础数据（M1 口径），与 seed:m2 共用 `scripts/lib/demo-school.cjs` 一份定义 |
-| `npm run db:reset` | 清空 / 重置数据（`--all` 恢复出厂、`--hard` 删库重建、`--dry-run` 只统计） |
-| `npm run test:sqlite` | 无 better-sqlite3 原生模块的机器上也能真跑数据层集成测试（Node ≥ 22.5） |
-| `npm run preview:ui` | 不用 Electron，在普通浏览器里预览渲染层（走真实 IPC + 真实库） |
+| 补充项         | 内容                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 三个录入视角   | 按教室 / 按教师 / 按班级各一张周课表网格，点格子就能排；原列表视图与批量弹窗保留                                   |
+| 「仅占用」语义 | migration 006 给 `fixed_lesson` 加 `kind`（`lesson`/`block`），机房维护、场地外借、教师开会不再需要硬绑一个班      |
+| 教学任务联动   | 选定班级 + 学科后自动带出任课教师与固定教室；下拉用 `<optgroup>` 分「相关 / 其他」两组                             |
+| 课时守恒 H4    | 预排节数超过教学任务周课时会被当场拦下（编辑面板进度条 + 网格下方占用药丸 + 输入自检 `FIXED_OVER_QUOTA` 三道关）   |
+| 迁移器自愈     | 迁移改为「以实际结构为准」，修掉了「库被外部重建/降级后版本号对不上、迁移被永久跳过」导致的运行时 `no such column` |
+
+工程设施（M3 会天天用到）：
+
+| 命令                  | 用途                                                                                          |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `npm run seed:m2`     | 铺示范高完中全量验收数据（120 班 / 1520 条任务 3900 节 / 373 条规则 / 186 条预排 / 3 约束组） |
+| `npm run seed:test`   | 只铺基础数据（M1 口径），与 seed:m2 共用 `scripts/lib/demo-school.cjs` 一份定义               |
+| `npm run db:reset`    | 清空 / 重置数据（`--all` 恢复出厂、`--hard` 删库重建、`--dry-run` 只统计）                    |
+| `npm run test:sqlite` | 无 better-sqlite3 原生模块的机器上也能真跑数据层集成测试（Node ≥ 22.5），当前 **94/94**       |
+| `npm run preview:ui`  | 不用 Electron，在普通浏览器里预览渲染层（走真实 IPC + 真实库）                                |
+
+可以直接复用的两块现成代码：
+
+- `src/shared/constraints/fixedLesson.ts` —— `detectFixedLessonConflicts` 返回 5 类冲突
+  （`class` / `teacher` / `room` / `invalid` / `quota`），对应 H1 / H2 / H3 / 录入合法性 / H4。
+  引擎判这几条硬约束**直接调它**，不要在 `src/solver` 里重写一份。
+- `src/renderer/src/components/rules/ResourceScheduleGrid.tsx` —— 纯展示的周课表网格
+  （规则底色、角标、并发计数、冲突红框、跨学段提示），M6 做手工调整课表时可直接复用。
 
 ### M3 的算例规模（比原计划大一倍）
 
 docs/06 的验收句写的是「60 班算例 ≤ 10s」，而现在的验收数据集是 **120 班双学段**：
 
-| 学段 | 班数 | 周可用时段 | 说明 |
-|---|---|---|---|
-| 初中部 | 60（初一~初三各 20） | 40 槽（8 节 × 5 天） | 最紧的初三：需 34 / 可用 38 |
+| 学段   | 班数                 | 周可用时段                                 | 说明                                                             |
+| ------ | -------------------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| 初中部 | 60（初一~初三各 20） | 40 槽（8 节 × 5 天）                       | 最紧的初三：需 34 / 可用 38                                      |
 | 高中部 | 60（高一~高三各 20） | 65 槽（13 节 × 5 天，含早读与 3 节晚自习） | 最紧的高三：需 57 / 可用 63；早读+晚自习已被整年级预排占掉 20 格 |
 
 余量只有 4~6 格，是**有意做紧的**——这样 M3 的裁剪与回溯才有意义。
@@ -95,7 +124,15 @@ docs/06 的验收句写的是「60 班算例 ≤ 10s」，而现在的验收数�
 
 ### 沙箱已知限制（别当成 bug）
 
-- 编译不了 better-sqlite3 原生模块 → `npm test` 会 skip 数据层集成用例，用 `npm run test:sqlite` 补；
+- 编译不了 better-sqlite3 原生模块 → `npm test` 会让数据层集成用例失败/跳过，
+  改用 `npm run test:sqlite`（只换 sqlite 驱动）。
   **M3 引擎是纯 TS 零 IO，不受这条限制，单测必须真跑真绿**。
 - 起不了 Electron 窗口、打不了 exe → 用 `npm run preview:ui` 看 UI；
-  高 DPI（如 4K + 150% 缩放）下的布局问题只有真机看得见，UI 改完请我截图复核。
+  高 DPI（如 4K + 150% 缩放）下的布局问题只有真机看得见，UI 改完请我截图复核
+  （变更日志 #12 的教训）。
+- **沙箱会把本地 git 提交连同 HEAD 一起回退到分支起点**（本会话发生过 6 次），
+  症状是 `git status` 满屏 `A`、push 被拒 `fetch first`。工作区文件不会丢，
+  推送过的东西也不会丢。恢复：`git fetch origin <当前分支>` + `git reset --mixed FETCH_HEAD`，
+  **绝不要用 `reset --hard`**。这就是「每个逻辑单元立刻 push」这条纪律的由来。
+- `node_modules` / `out/` / `.local-data/` 每轮都可能被清空，甚至同一轮内两次工具调用之间也会，
+  开工先 `ls node_modules | wc -l` 再决定是否 `npm install --ignore-scripts --no-audit --no-fund`。
