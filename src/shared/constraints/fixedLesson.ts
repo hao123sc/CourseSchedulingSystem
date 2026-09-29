@@ -21,6 +21,8 @@ export interface FixedLessonLike {
   /** lesson 时二选一：班级级占位 或 整年级占位；block 时两者都为 null */
   classId: number | null
   gradeId: number | null
+  /** 归属学科，用于课时守恒（H4）核对；升旗/班会这类无学科占位为 null */
+  subjectId?: number | null
   teacherId: number | null
   classroomId: number | null
   slotId: number
@@ -35,9 +37,16 @@ export interface FixedLessonContext {
   gradeClasses: Map<number, number[]>
   /** classroomId → concurrent_capacity */
   roomConcurrency: Map<number, number>
+  /**
+   * `classId:subjectId` → 教学任务的周课时数，用于课时守恒（H4）。
+   * 省略则跳过课时校验（旧调用方、单测里只关心占用冲突的场景）。
+   * 没有对应教学任务的组合**不在此表内**，也就不会被判超额 ——
+   * 讲座、代课这类课表外安排不该被拦住。
+   */
+  subjectQuota?: Map<string, number>
 }
 
-export type FixedConflictKind = 'class' | 'teacher' | 'room' | 'invalid'
+export type FixedConflictKind = 'class' | 'teacher' | 'room' | 'invalid' | 'quota'
 
 export interface FixedLessonConflict {
   kind: FixedConflictKind
@@ -186,6 +195,39 @@ export function detectFixedLessonConflicts(
         message: `场地并发容量不足：该时段需 ${v.used} 个班位，仅有 ${cap} 个`,
         indexes: v.idxs
       })
+    }
+  }
+
+  // 4. 课时守恒（H4）：一个班某学科的预排节数不能超过教学任务定的周课时数。
+  //    预排是直接钉死在课表上的，超出部分在 M3 求解时无论如何都消化不掉 ——
+  //    「一个班一周 1 节信息技术却预排了 5 节」必然无解，且报错点会离录入现场很远，
+  //    所以在录入时就挡住。年级级占位按它实际覆盖的每个班分别计数。
+  if (ctx.subjectQuota && ctx.subjectQuota.size > 0) {
+    const quotaSeen = new Map<string, number[]>()
+    lessons.forEach((f, i) => {
+      if (kindOf(f) === 'block' || f.subjectId == null) return
+      for (const c of expandClasses(f, ctx)) {
+        const key = `${c}:${f.subjectId}`
+        const arr = quotaSeen.get(key)
+        if (arr) arr.push(i)
+        else quotaSeen.set(key, [i])
+      }
+    })
+    for (const [key, idxs] of quotaSeen) {
+      const limit = ctx.subjectQuota.get(key)
+      // 该班没有这门课的教学任务 → 不归课时守恒管（上面注释说明的理由）
+      if (limit == null) continue
+      if (idxs.length > limit) {
+        conflicts.push({
+          kind: 'quota',
+          slotId: lessons[idxs[idxs.length - 1]].slotId,
+          message:
+            limit === 0
+              ? '这门课的教学任务周课时为 0，不能预排'
+              : `课时超额：该班这门课预排了 ${idxs.length} 节，教学任务只有 ${limit} 节`,
+          indexes: idxs
+        })
+      }
     }
   }
 

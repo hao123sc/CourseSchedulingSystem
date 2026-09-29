@@ -54,6 +54,8 @@ export interface TaskIndex {
   subjectsOfTeacherInClass: Map<string, number[]>
   /** `classId#subjectId` → 该教学任务绑定的固定教室 */
   roomOfClassSubject: Map<string, number>
+  /** `classId:subjectId` → 周课时数，课时守恒（H4）的上限 */
+  quota: Map<string, number>
 }
 
 const pairKey = (a: number | string, b: number | string): string => `${a}#${b}`
@@ -71,13 +73,17 @@ function buildTaskIndex(tasks: TeachingTask[]): TaskIndex {
     teachersOfClass: new Map(),
     classesOfTeacher: new Map(),
     subjectsOfTeacherInClass: new Map(),
-    roomOfClassSubject: new Map()
+    roomOfClassSubject: new Map(),
+    quota: new Map()
   }
   for (const t of tasks) {
     pushUnique(idx.subjectsOfClass, t.classId, t.subjectId)
     if (t.fixedRoomId != null) {
       idx.roomOfClassSubject.set(pairKey(t.classId, t.subjectId), t.fixedRoomId)
     }
+    // 同班同科理论上只有一条任务；万一有重复（合班拆条）取和，宁可放宽不要误伤
+    const qk = `${t.classId}:${t.subjectId}`
+    idx.quota.set(qk, (idx.quota.get(qk) ?? 0) + t.weeklyPeriods)
     if (t.teacherId == null) continue
     pushUnique(idx.teachersOfClassSubject, pairKey(t.classId, t.subjectId), t.teacherId)
     pushUnique(idx.teachersOfClass, t.classId, t.teacherId)
@@ -240,6 +246,47 @@ export function FixedLessonBoard({
       return r.classId === resourceId || (r.gradeId != null && r.gradeId === myGradeId)
     })
   }, [rows, resourceId, mode, myGradeId])
+
+  /**
+   * 课时占用总览（H4）：眼前这张表牵扯到的每个「班级 + 学科」一共预排了几节 / 教学任务给了几节。
+   * 用量按**全学期**统计 —— 教室视角只数本教室的话，同一门课排到别间教室就漏掉了。
+   * 超额的排在最前面，一眼就能看到哪门课排多了。
+   */
+  const quotaBars = useMemo(() => {
+    const expand = (r: FixedLesson): number[] =>
+      r.classId != null
+        ? [r.classId]
+        : r.gradeId != null
+          ? meta.classes.filter((c) => c.gradeId === r.gradeId).map((c) => c.id)
+          : []
+    const used = new Map<string, number>()
+    for (const r of rows) {
+      if (r.kind === 'block' || r.subjectId == null) continue
+      for (const c of expand(r)) {
+        const k = `${c}:${r.subjectId}`
+        used.set(k, (used.get(k) ?? 0) + 1)
+      }
+    }
+    const shown = new Map<string, { classId: number; subjectId: number }>()
+    for (const r of mine) {
+      if (r.kind === 'block' || r.subjectId == null) continue
+      for (const c of expand(r)) {
+        if (mode === 'class' && c !== resourceId) continue
+        shown.set(`${c}:${r.subjectId}`, { classId: c, subjectId: r.subjectId })
+      }
+    }
+    return [...shown.entries()]
+      .map(([key, v]) => ({
+        key,
+        limit: taskIndex.quota.get(key) ?? 0,
+        used: used.get(key) ?? 0,
+        hasTask: taskIndex.quota.has(key),
+        className: classById.get(v.classId)?.name ?? '',
+        subject: subjectById.get(v.subjectId)?.name ?? ''
+      }))
+      .filter((x) => x.hasTask)
+      .sort((a, b) => b.used / Math.max(1, b.limit) - a.used / Math.max(1, a.limit))
+  }, [rows, mine, mode, resourceId, taskIndex, meta.classes, classById, subjectById])
 
   /** 每个资源已有多少占位，显示在左侧列表上 */
   const countByResource = useMemo(() => {
@@ -510,6 +557,31 @@ export function FixedLessonBoard({
               onCellClick={openCell}
               onEntryClick={openEntry}
             />
+            {quotaBars.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="text-[color:var(--text-secondary)]">
+                  课时占用（本周已预排 / 教学任务）
+                </span>
+                {quotaBars.map((q) => (
+                  <span
+                    key={q.key}
+                    title={`${q.className} ${q.subject}：全学期已预排 ${q.used} 节，教学任务 ${q.limit} 节`}
+                    className={cn(
+                      'rounded-full border px-1.5 py-0.5 tabular-nums',
+                      q.used > q.limit
+                        ? 'border-red-300 bg-red-50 font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                        : q.used === q.limit
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : 'border-[color:var(--border)] text-[color:var(--text-secondary)]'
+                    )}
+                  >
+                    {mode !== 'class' && `${q.className} `}
+                    {q.subject} {q.used}/{q.limit}
+                    {q.used > q.limit && ' 超'}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -632,6 +704,26 @@ function CellEditor({
     setClassroomId((prev) => (prev === '' ? room : prev))
   }, [classId, subjectId, kind, mode, taskIndex])
 
+  /**
+   * 课时守恒（H4）的实时余额：算上正在编辑的这一节，该班这门课一共占了几节。
+   * 年级级占位覆盖到这个班的也要算进去，口径要和 constraints 那份判定一致。
+   */
+  const quotaInfo = useMemo(() => {
+    if (kind !== 'lesson' || classId === '' || subjectId === '') return null
+    const limit = taskIndex.quota.get(`${classId}:${subjectId}`)
+    if (limit == null) return null
+    const gradeId = meta.classes.find((c) => c.id === Number(classId))?.gradeId
+    const used = rows.filter(
+      (r) =>
+        r.kind !== 'block' &&
+        r.id !== row?.id &&
+        r.subjectId === Number(subjectId) &&
+        (r.classId === Number(classId) ||
+          (r.classId == null && gradeId != null && r.gradeId === gradeId))
+    ).length
+    return { used: used + 1, limit }
+  }, [kind, classId, subjectId, rows, row?.id, taskIndex, meta.classes])
+
   /** 组合不符合教学任务时的温和提示（不拦保存，代课/活动课是合理场景） */
   const hints = useMemo(() => {
     if (kind !== 'lesson') return []
@@ -685,9 +777,10 @@ function CellEditor({
     return {
       classGrade,
       gradeClasses,
-      roomConcurrency: new Map(meta.classrooms.map((r) => [r.id, r.concurrentCapacity]))
+      roomConcurrency: new Map(meta.classrooms.map((r) => [r.id, r.concurrentCapacity])),
+      subjectQuota: taskIndex.quota
     }
-  }, [meta.classes, meta.classrooms])
+  }, [meta.classes, meta.classrooms, taskIndex])
 
   const payload: FixedLessonInput = {
     ...(row?.id != null ? { id: row.id } : {}),
@@ -711,6 +804,7 @@ function CellEditor({
           kind: payload.kind,
           classId: payload.classId ?? null,
           gradeId: null,
+          subjectId: payload.subjectId ?? null,
           teacherId: payload.teacherId ?? null,
           classroomId: payload.classroomId ?? null,
           slotId: slot.id
@@ -720,6 +814,7 @@ function CellEditor({
           kind: r.kind,
           classId: r.classId,
           gradeId: r.gradeId,
+          subjectId: r.subjectId,
           teacherId: r.teacherId,
           classroomId: r.classroomId,
           slotId: r.slotId
@@ -729,6 +824,7 @@ function CellEditor({
     [
       payload.kind,
       payload.classId,
+      payload.subjectId,
       payload.teacherId,
       payload.classroomId,
       row?.id,
@@ -737,8 +833,10 @@ function CellEditor({
       slot.id
     ]
   )
-  const blocking = issues.filter((i) => i.kind === 'invalid')
-  const warning = issues.filter((i) => i.kind !== 'invalid')
+  // 课时超额和「没绑班级」一样是确定性错误：钉上去 M3 必定无解，没有「确认后照做」的余地。
+  // 想多排只能去教学任务把周课时改大，提示里已写明这条出路。
+  const blocking = issues.filter((i) => i.kind === 'invalid' || i.kind === 'quota')
+  const warning = issues.filter((i) => i.kind !== 'invalid' && i.kind !== 'quota')
 
   useEffect(() => setForced(false), [issues.length])
 
@@ -923,6 +1021,49 @@ function CellEditor({
             className="h-8 text-xs"
           />
         </Row>
+
+        {quotaInfo && (
+          <div
+            className={cn(
+              'rounded-card border p-2.5 text-xs',
+              quotaInfo.used > quotaInfo.limit
+                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'
+                : quotaInfo.used === quotaInfo.limit
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300'
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span>这门课本周课时</span>
+              <span className="font-semibold tabular-nums">
+                {quotaInfo.used} / {quotaInfo.limit} 节
+              </span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/70 dark:bg-black/30">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all',
+                  quotaInfo.used > quotaInfo.limit
+                    ? 'bg-red-500'
+                    : quotaInfo.used === quotaInfo.limit
+                      ? 'bg-emerald-500'
+                      : 'bg-brand-500'
+                )}
+                style={{
+                  width: `${Math.min(100, (quotaInfo.used / Math.max(1, quotaInfo.limit)) * 100)}%`
+                }}
+              />
+            </div>
+            <p className="mt-1.5">
+              {quotaInfo.used > quotaInfo.limit
+                ? `已超出 ${quotaInfo.used - quotaInfo.limit} 节。先删掉多余的预排，` +
+                  `确实要上这么多就去「教学任务」把周课时改大。`
+                : quotaInfo.used === quotaInfo.limit
+                  ? '算上这一节正好排满，这门课不会再出现在自动排课里。'
+                  : `算上这一节还剩 ${quotaInfo.limit - quotaInfo.used} 节交给自动排课。`}
+            </p>
+          </div>
+        )}
 
         {hints.length > 0 && (
           <ul className="flex flex-col gap-1 rounded-card border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">

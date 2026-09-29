@@ -206,3 +206,85 @@ describe('kind=block 仅占用（migration 006）', () => {
     expect(out[0].message).toContain('预排课必须指定')
   })
 })
+
+/**
+ * 课时守恒 H4：预排是钉死的，超出教学任务周课时的部分在排课阶段无论如何消化不掉。
+ * 11 班语文(科目 5) 一周 2 节、数学(科目 6) 一周 1 节；12 班没开语文。
+ */
+const quotaCtx: FixedLessonContext = {
+  ...ctx,
+  subjectQuota: new Map([
+    ['11:5', 2],
+    ['11:6', 1],
+    ['13:5', 2]
+  ])
+}
+
+describe('预排锁定课时守恒（H4）', () => {
+  const lesson = (subjectId: number, slotId: number, classId = 11): FixedLessonLike =>
+    f({ kind: 'lesson', classId, subjectId, slotId })
+
+  it('排到刚好等于周课时不算冲突', () => {
+    const out = detectFixedLessonConflicts([lesson(5, 1), lesson(5, 2)], quotaCtx)
+    expect(out).toHaveLength(0)
+  })
+
+  it('多排一节就报超额，并把同班同科的每一节都圈出来给人删', () => {
+    const out = detectFixedLessonConflicts([lesson(5, 1), lesson(5, 2), lesson(5, 3)], quotaCtx)
+    const q = out.find((c) => c.kind === 'quota')
+    expect(q).toBeDefined()
+    expect(q?.message).toContain('预排了 3 节')
+    expect(q?.message).toContain('只有 2 节')
+    expect(q?.indexes).toEqual([0, 1, 2])
+  })
+
+  it('各科分别计数，不会串味', () => {
+    const out = detectFixedLessonConflicts([lesson(5, 1), lesson(5, 2), lesson(6, 3)], quotaCtx)
+    expect(out.filter((c) => c.kind === 'quota')).toHaveLength(0)
+  })
+
+  it('年级级占位按它覆盖的每个班分别计入课时', () => {
+    // 初一整年级排 1 节语文 → 11 班和 13 班各占 1 节；11 班自己再排 2 节就超了
+    const out = detectFixedLessonConflicts(
+      [f({ kind: 'lesson', gradeId: 1, subjectId: 5, slotId: 1 }), lesson(5, 2), lesson(5, 3)],
+      quotaCtx
+    )
+    const q = out.find((c) => c.kind === 'quota')
+    expect(q?.message).toContain('预排了 3 节')
+  })
+
+  it('没有教学任务的组合不归课时守恒管（讲座、代课这类课表外安排）', () => {
+    const out = detectFixedLessonConflicts(
+      [lesson(5, 1, 12), lesson(5, 2, 12), lesson(5, 3, 12)],
+      quotaCtx
+    )
+    expect(out.filter((c) => c.kind === 'quota')).toHaveLength(0)
+  })
+
+  it('升旗、班会这类无学科占位不占任何课时', () => {
+    const out = detectFixedLessonConflicts(
+      [f({ kind: 'lesson', classId: 11, slotId: 1, label: '班会' })],
+      quotaCtx
+    )
+    expect(out.filter((c) => c.kind === 'quota')).toHaveLength(0)
+  })
+
+  it('仅占用（block）不计课时', () => {
+    const out = detectFixedLessonConflicts(
+      [lesson(5, 1), lesson(5, 2), f({ kind: 'block', teacherId: 9, slotId: 4 })],
+      quotaCtx
+    )
+    expect(out.filter((c) => c.kind === 'quota')).toHaveLength(0)
+  })
+
+  it('没提供配额表时整段跳过，旧调用方行为不变', () => {
+    const out = detectFixedLessonConflicts([lesson(5, 1), lesson(5, 2), lesson(5, 3)], ctx)
+    expect(out.filter((c) => c.kind === 'quota')).toHaveLength(0)
+  })
+
+  it('增量校验：排满之后再加一节会被当场拦下', () => {
+    const existing = [lesson(5, 1), lesson(5, 2)].map((x, i) => ({ ...x, id: i + 1 }))
+    const out = checkFixedLessonAgainst(lesson(5, 3), existing, quotaCtx)
+    expect(out.some((c) => c.kind === 'quota')).toBe(true)
+  })
+})

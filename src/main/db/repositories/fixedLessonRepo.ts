@@ -56,10 +56,19 @@ export function loadFixedContext(semesterId: number): FixedLessonContext {
     id: number
     concurrent_capacity: number
   }[]
+  // 课时守恒（H4）的上限来自教学任务。同一个班同一门课理论上只有一条任务，
+  // 万一有重复（合班教学拆了两条）就取和，宁可放宽也不要误伤。
+  const quotaRows = db
+    .prepare(
+      `SELECT class_id, subject_id, SUM(weekly_periods) AS periods
+         FROM teaching_task WHERE semester_id = ? GROUP BY class_id, subject_id`
+    )
+    .all(semesterId) as { class_id: number; subject_id: number; periods: number }[]
   return {
     classGrade,
     gradeClasses,
-    roomConcurrency: new Map(rooms.map((r) => [r.id, r.concurrent_capacity]))
+    roomConcurrency: new Map(rooms.map((r) => [r.id, r.concurrent_capacity])),
+    subjectQuota: new Map(quotaRows.map((r) => [`${r.class_id}:${r.subject_id}`, r.periods]))
   }
 }
 

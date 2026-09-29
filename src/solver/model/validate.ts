@@ -240,6 +240,46 @@ export function validateSolverInput(input: SolverInput): SolverInputReport {
     }
   }
 
+  // ── 6b. 预排占位是否吃超了教学任务的课时（H4 课时守恒）────────────────
+  //      预排是钉死的，超出的部分无论怎么排都消化不掉，属于开排前必须清掉的死结。
+  {
+    const quota = new Map<string, number>()
+    for (const t of input.tasks) {
+      const k = `${t.classId}:${t.subjectId}`
+      quota.set(k, (quota.get(k) ?? 0) + t.weeklyPeriods)
+    }
+    const fixedUsed = new Map<string, number>()
+    for (const f of input.fixedLessons) {
+      if (f.kind === 'block' || f.subjectId == null) continue
+      const targets =
+        f.classId != null
+          ? [f.classId]
+          : f.gradeId != null
+            ? input.classes.filter((c) => c.gradeId === f.gradeId).map((c) => c.id)
+            : []
+      for (const c of targets) {
+        const k = `${c}:${f.subjectId}`
+        fixedUsed.set(k, (fixedUsed.get(k) ?? 0) + 1)
+      }
+    }
+    for (const [k, used] of fixedUsed) {
+      const limit = quota.get(k)
+      // 没有教学任务的组合不归课时守恒管（讲座、代课这类课表外安排）
+      if (limit == null || used <= limit) continue
+      const [classIdStr, subjectIdStr] = k.split(':')
+      const classId = Number(classIdStr)
+      const subjectName = subjectById.get(Number(subjectIdStr))?.name ?? '该学科'
+      issues.push({
+        level: 'error',
+        code: 'FIXED_OVER_QUOTA',
+        message:
+          `${classById.get(classId)?.name ?? '某班'}「${subjectName}」预排了 ${used} 节，` +
+          `教学任务只有 ${limit} 节 —— 删掉多余的预排，或把周课时改大`,
+        ref: { kind: 'class', id: classId }
+      })
+    }
+  }
+
   // ── 7. 需专用教室的学科是否绑定了场地 ─────────────────────────────────
   const usedSubjects = new Set(input.tasks.map((t) => t.subjectId))
   for (const s of input.subjects) {
