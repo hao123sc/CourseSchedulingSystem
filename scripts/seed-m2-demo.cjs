@@ -22,22 +22,15 @@
  * 幂等：可反复运行得到一致结果。⚠️ 会清空当前学期的年级与规则并重建，
  *       且把 school 单例改写为「示范高完中」、停用小学学段。
  */
-// 正式用法是 `npm run seed:test` / `npm run seed:m2`（由 electron 启动，匹配原生 ABI）。
-// 但只要显式指定了 ZHIKEPAI_DB，就允许在纯 Node 下直跑——供沙箱/CI 校验种子逻辑用，
-// 详见 docs/08 §8。此时不依赖 electron，也就不需要下载 Electron 运行时。
-let app = null
-try {
-  ;({ app } = require('electron'))
-} catch (err) {
-  if (!process.env.ZHIKEPAI_DB) throw err
-}
 const Database = require('better-sqlite3')
 const base = require('./lib/demo-school.cjs')
+// 退出 / Windows 控制台编码 / electron 与纯 Node 双模式，统一在这里处理
+const { runSeed, printSummary } = require('./lib/cli.cjs')
 
 /** 早读只安排语文/英语，其余学科在早读时段一律禁排 */
 const MORNING_READING_SUBJECTS = new Set(['语文', '英语'])
 
-function main() {
+function main(app) {
   const dbPath = base.getDbPath(app)
   const db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
@@ -47,10 +40,11 @@ function main() {
   const out = db.transaction(() => seed(db))()
   db.close()
 
-  console.log('\n===== 示范高完中 · M2 数据已就绪 =====')
-  for (const [k, v] of Object.entries(out)) console.log(`  ${k.padEnd(14)} ${v}`)
-  console.log(`  数据库          ${dbPath}`)
-  console.log('\n打开「教学任务」「排课规则 → 输入自检」两页即可验收（顶部可切换初中部/高中部）。')
+  printSummary(
+    '示范高完中 · M2 数据已就绪',
+    { ...out, 数据库: dbPath },
+    '打开「教学任务」「排课规则 → 输入自检」两页即可验收（顶部可切换初中部/高中部）。'
+  )
 }
 
 function seed(db) {
@@ -317,4 +311,4 @@ function seed(db) {
   }
 }
 
-main()
+runSeed(main)
