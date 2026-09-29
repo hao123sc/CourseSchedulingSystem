@@ -66,6 +66,31 @@ function getDbPath(app) {
   return path.join(dir, 'data.db')
 }
 
+/**
+ * 从迁移 SQL 文本里推导它会新增哪些列。
+ *
+ * 用途：判断一条「账上记着已应用」的迁移是不是真的生效过。`ALTER TABLE ADD COLUMN`
+ * 是最容易出现「版本号记了、结构却没有」的一类（库被外部重建/还原过），
+ * 而这个信息 SQL 自己就写着，不需要再维护一份结构清单。
+ */
+function addedColumns(sql) {
+  return [...sql.matchAll(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/gi)].map((m) => ({
+    table: m[1],
+    column: m[2]
+  }))
+}
+
+function columnExists(db, table, column) {
+  try {
+    return db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .some((r) => r.name === column)
+  } catch {
+    return false
+  }
+}
+
 function runMigrations(db) {
   db.exec(
     `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now','localtime')));`
@@ -76,11 +101,16 @@ function runMigrations(db) {
       .all()
       .map((r) => r.version)
   )
-  const record = db.prepare('INSERT INTO schema_version (version) VALUES (?)')
+  const record = db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)')
   const dir = MIGRATIONS_DIR
   for (const m of MIGRATIONS) {
-    if (applied.has(m.version)) continue
     const sql = fs.readFileSync(path.join(dir, m.file), 'utf-8')
+    if (applied.has(m.version)) {
+      // 账上记着已应用，再核一遍它声称新增的列是否真在——不在就说明库被外部
+      // 重建/还原过，必须重放，否则这条迁移会被永久跳过（与 src/main/db/migrate.ts 同一策略）
+      const missing = addedColumns(sql).filter((c) => !columnExists(db, c.table, c.column))
+      if (missing.length === 0) continue
+    }
     db.transaction(() => {
       db.exec(sql)
       record.run(m.version)

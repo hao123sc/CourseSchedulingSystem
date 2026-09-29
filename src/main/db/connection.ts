@@ -26,26 +26,45 @@ export function getDb(): Database.Database {
   if (db) return db
 
   const dbPath = getDbPath()
-  db = new Database(dbPath)
-  // PRAGMA 配置见 docs/03 第 4 章
-  db.pragma('journal_mode = WAL')
-  db.pragma('synchronous = NORMAL')
-  db.pragma('foreign_keys = ON')
-  db.pragma('temp_store = MEMORY')
-  db.pragma('cache_size = -64000') // 64MB
+  const conn = new Database(dbPath)
+  try {
+    // PRAGMA 配置见 docs/03 第 4 章
+    conn.pragma('journal_mode = WAL')
+    conn.pragma('synchronous = NORMAL')
+    conn.pragma('foreign_keys = ON')
+    conn.pragma('temp_store = MEMORY')
+    conn.pragma('cache_size = -64000') // 64MB
 
-  // M0 自检表：验证 better-sqlite3 原生模块在当前进程（含打包后）可正常读写
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS health_check (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      message TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-    );
-  `)
+    // M0 自检表：验证 better-sqlite3 原生模块在当前进程（含打包后）可正常读写
+    conn.exec(`
+      CREATE TABLE IF NOT EXISTS health_check (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+    `)
 
-  // M1：应用建表与内置种子迁移（幂等，已应用的版本会跳过）
-  runMigrations(db)
+    // 应用建表与内置种子迁移（已生效的会跳过，结构漂移的会自愈重放）
+    const { applied, repaired } = runMigrations(conn)
+    if (applied.length > 0) {
+      console.log(`[db] 已应用迁移：${applied.join(', ')}`)
+    }
+    if (repaired.length > 0) {
+      // 版本号声称做过、结构却对不上——库被外部工具改过，值得在日志里留痕
+      console.warn(
+        `[db] 检测到结构与 schema_version 不一致，已重新应用：${repaired.join(', ')}。` +
+          `常见原因：本 app 运行期间用 db:reset --hard 重建过数据库，或手工替换/还原过 data.db。`
+      )
+    }
+  } catch (err) {
+    // ⚠️ 迁移失败绝不能把连接留在模块变量里：
+    // 否则后续每次 getDb() 都会直接复用这个「连得上但结构不全」的连接，
+    // 迁移再也不会被尝试，表现为「app 能开、读也正常，一写就报 no such column」。
+    conn.close()
+    throw err
+  }
 
+  db = conn
   return db
 }
 

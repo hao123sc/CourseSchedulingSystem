@@ -180,7 +180,7 @@ function report(dbPath, before, after) {
 
   const summary = { 模式: MODE_LABEL[MODE] }
   if (MODE === 'hard') {
-    summary['已清空'] = '整个库文件已删除并按迁移 001~005 重建'
+    summary['已清空'] = `整个库文件已删除并按全部 ${base.MIGRATIONS.length} 条迁移重建`
   } else {
     summary['已清空'] = changed.length
       ? changed.map((t) => `${t} ${before[t] || 0}→${after[t]}`).join('，')

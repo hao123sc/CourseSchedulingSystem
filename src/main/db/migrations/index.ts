@@ -10,6 +10,29 @@ export interface Migration {
   version: number
   name: string
   sql: string
+  /**
+   * 可选的**结构断言**：返回 true 表示这条迁移的效果已经实际存在于库里。
+   *
+   * 只看 schema_version 是不够的——库可能被外部工具（`npm run db:reset --hard`、
+   * 手工替换 data.db、从旧备份恢复）重建成低版本结构，而版本号却停留在高位，
+   * 于是迁移被永久跳过、结构再也补不回来（用户真机上就这么炸的：
+   * 版本号有 6，`fixed_lesson` 却没有 kind 列）。
+   *
+   * 带 verify 的迁移由断言说了算：断言不成立就重新应用，
+   * 因此它的 SQL **必须能在「断言不成立」的状态下安全重放**。
+   */
+  verify?: (db: MigrationDb) => boolean
+}
+
+/** 迁移执行器只需要这点能力，不绑定具体驱动（主进程用 better-sqlite3，脚本用 node:sqlite 壳） */
+export interface MigrationDb {
+  prepare(sql: string): { all(...params: unknown[]): unknown[] }
+}
+
+/** 表里是否已有某列 */
+export function hasColumn(db: MigrationDb, table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name?: string }[]
+  return rows.some((r) => r.name === column)
 }
 
 /**
@@ -22,5 +45,11 @@ export const MIGRATIONS: Migration[] = [
   { version: 3, name: '003_seed_subjects', sql: seed003 },
   { version: 4, name: '004_seed_weights', sql: seed004 },
   { version: 5, name: '005_m2_rules', sql: m2005 },
-  { version: 6, name: '006_fixed_lesson_kind', sql: m006 }
+  {
+    version: 6,
+    name: '006_fixed_lesson_kind',
+    sql: m006,
+    // ALTER TABLE ADD COLUMN 不幂等，靠这个断言既做自愈触发器又做重放守卫
+    verify: (db) => hasColumn(db, 'fixed_lesson', 'kind')
+  }
 ]
