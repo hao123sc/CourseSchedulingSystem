@@ -204,6 +204,7 @@ function main() {
 
     let classCount = 0
     let roomCount = 0
+    const classIds = []
     grades.forEach((g, gi) => {
       const stageId = stageIdByCode(db, g.code)
       const gradeId = Number(insGrade.run(sem1, stageId, g.name, gi + 1).lastInsertRowid)
@@ -217,6 +218,7 @@ function main() {
         delRoomByName.run(className)
         const roomId = Number(insRoom.run(className, building).lastInsertRowid)
         setHomeRoom.run(roomId, classId)
+        classIds.push(classId)
         classCount++
         roomCount++
       }
@@ -224,10 +226,25 @@ function main() {
 
     ensureSportsField(db)
     const teacherCreated = seedTeachers(db, 200)
-    return { sem1, classCount, roomCount, teacherCreated }
+
+    // 为每个班级指定一名班主任（按工号顺序 T001.. 依次分配，一师一班）
+    const teacherIds = db
+      .prepare('SELECT id FROM teacher ORDER BY staff_no')
+      .all()
+      .map((r) => r.id)
+    const setHeadTeacher = db.prepare('UPDATE klass SET head_teacher_id = ? WHERE id = ?')
+    let headAssigned = 0
+    classIds.forEach((classId, idx) => {
+      if (idx < teacherIds.length) {
+        setHeadTeacher.run(teacherIds[idx], classId)
+        headAssigned++
+      }
+    })
+
+    return { sem1, classCount, roomCount, teacherCreated, headAssigned }
   })
 
-  const { classCount, roomCount, teacherCreated } = tx()
+  const { classCount, roomCount, teacherCreated, headAssigned } = tx()
 
   // 汇总
   const summary = {
@@ -252,6 +269,9 @@ function main() {
     teacherTotal: db.prepare('SELECT COUNT(*) AS c FROM teacher').get().c,
     withHomeRoom: db.prepare('SELECT COUNT(*) AS c FROM klass WHERE home_room_id IS NOT NULL').get()
       .c,
+    withHeadTeacher: db
+      .prepare('SELECT COUNT(*) AS c FROM klass WHERE head_teacher_id IS NOT NULL')
+      .get().c,
     normalRooms: db.prepare("SELECT COUNT(*) AS c FROM classroom WHERE room_type='normal'").get().c
   }
   db.close()
@@ -265,9 +285,11 @@ function main() {
   console.log('年级/班级（当前学期）：')
   for (const g of summary.grades) console.log(`  - ${g.grade}: ${g.classes} 班`)
   console.log(
-    `共 ${summary.totalClasses} 个班，每班 ${45} 人；已配固定教室 ${summary.withHomeRoom} 个班`
+    `共 ${summary.totalClasses} 个班，每班 ${45} 人；已配固定教室 ${summary.withHomeRoom} 个班；已配班主任 ${summary.withHeadTeacher} 个班`
   )
-  console.log(`教师：共 ${summary.teacherTotal} 名（本次新增 ${teacherCreated} 名）`)
+  console.log(
+    `教师：共 ${summary.teacherTotal} 名（本次新增 ${teacherCreated} 名，其中 ${headAssigned} 名担任班主任）`
+  )
   console.log(`教室：普通教室 ${summary.normalRooms} 间 + 田径场 1 个`)
   console.log(
     `体育场地：${summary.sportsField.name}  座位${summary.sportsField.capacity}  最多 ${summary.sportsField.concurrent_capacity} 个班同时上`
