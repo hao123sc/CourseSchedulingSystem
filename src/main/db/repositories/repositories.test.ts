@@ -73,10 +73,11 @@ describe.skipIf(!nativeOk)('M1 数据层 · 迁移 + 种子 + Repository', () =>
   })
 
   it('学校单例 upsert', () => {
-    const saved = r.schoolRepo.save({ name: '示范初中', schoolType: 'junior' })
+    const saved = r.schoolRepo.save({ name: '示范高完中', schoolType: 'complete' })
     expect(saved.id).toBe(1)
-    r.schoolRepo.save({ name: '示范初中(改)', schoolType: 'junior' })
-    expect(r.schoolRepo.get()?.name).toBe('示范初中(改)')
+    r.schoolRepo.save({ name: '示范高完中(改)', schoolType: 'complete' })
+    expect(r.schoolRepo.get()?.name).toBe('示范高完中(改)')
+    expect(r.schoolRepo.get()?.schoolType).toBe('complete')
   })
 
   it('学期新增/设为当前（唯一当前学期约束）', () => {

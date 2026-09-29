@@ -47,14 +47,20 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
   const r = {} as Ctx
   const ids = {
     semesterId: 0,
+    // 初中部
     stageId: 0,
     gradeIds: [] as number[],
     classIds: [] as number[],
+    slotIds: [] as number[],
+    // 高中部（高完中基准：两套作息并存，见 PROGRESS 风险表）
+    seniorStageId: 0,
+    seniorGradeIds: [] as number[],
+    seniorClassIds: [] as number[],
+    seniorSlotIds: [] as number[],
     chinese: 0,
     pe: 0,
     teacherIds: [] as number[],
-    trackId: 0,
-    slotIds: [] as number[]
+    trackId: 0
   }
 
   beforeAll(async () => {
@@ -74,13 +80,18 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
     r.buildSolverInput = svc.buildSolverInput
     r.checkSolverInput = svc.checkSolverInput
 
-    // ── 构造一所「示范初中」：3 年级 × 4 班 ──
+    // ── 构造一所「示范高完中」：初中部 3 年级 + 高中部 3 年级，各 4 班 ──
+    // 验收基准是高完中（docs/06 M2），初高中**两套作息并存**是必须覆盖的场景：
+    // 初中 8 节/天 = 40 槽/周，高中 早读 + 9 节 + 3 节晚自习 = 65 槽/周。
     const sem = r.semesterRepo.upsert({ name: '2026-2027学年第一学期' })
     r.semesterRepo.setCurrent(sem.id)
     ids.semesterId = sem.id
     const junior = r.stageRepo.list().find((s) => s.code === 'junior')!
     ids.stageId = junior.id
     ids.slotIds = r.stageRepo.listSlots(junior.id).map((s) => s.id)
+    const senior = r.stageRepo.list().find((s) => s.code === 'senior')!
+    ids.seniorStageId = senior.id
+    ids.seniorSlotIds = r.stageRepo.listSlots(senior.id).map((s) => s.id)
 
     for (const name of ['初一', '初二', '初三']) {
       const g = r.gradeRepo.upsert({ semesterId: sem.id, stageId: junior.id, name })
@@ -91,6 +102,16 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
         namePattern: '{name}({n})班'
       })
       ids.classIds.push(...created.map((c) => c.id))
+    }
+    for (const name of ['高一', '高二', '高三']) {
+      const g = r.gradeRepo.upsert({ semesterId: sem.id, stageId: senior.id, name })
+      ids.seniorGradeIds.push(g.id)
+      const created = r.classRepo.batchCreate({
+        gradeId: g.id,
+        count: 4,
+        namePattern: '{name}({n})班'
+      })
+      ids.seniorClassIds.push(...created.map((c) => c.id))
     }
 
     const subjects = r.subjectRepo.list()
@@ -194,9 +215,7 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
   })
 
   it('批量指派教师 + 工作量看板超限判定', () => {
-    const cells = ids.classIds
-      .slice(0, 4)
-      .map((classId) => ({ classId, subjectId: ids.chinese }))
+    const cells = ids.classIds.slice(0, 4).map((classId) => ({ classId, subjectId: ids.chinese }))
     r.taskRepo.assignTeacher(ids.semesterId, cells, ids.teacherIds[0])
     const assigned = r.taskRepo
       .listBySemester(ids.semesterId)
@@ -226,9 +245,7 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
     )
     expect(r.ruleRepo.listByScope(ids.semesterId, scope)).toHaveLength(5)
 
-    r.ruleRepo.setCells(ids.semesterId, scope, [
-      { slotId: ids.slotIds[0], ruleValue: 'NORMAL' }
-    ])
+    r.ruleRepo.setCells(ids.semesterId, scope, [{ slotId: ids.slotIds[0], ruleValue: 'NORMAL' }])
     expect(r.ruleRepo.listByScope(ids.semesterId, scope)).toHaveLength(4)
 
     // 同一格重刷不会产生重复行
@@ -264,9 +281,7 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
     }
 
     const summary = r.ruleRepo.summary(ids.semesterId)
-    const mine = summary.find(
-      (s) => s.scopeType === 'teacher' && s.scopeId === ids.teacherIds[0]
-    )!
+    const mine = summary.find((s) => s.scopeType === 'teacher' && s.scopeId === ids.teacherIds[0])!
     expect(mine.ruleCount).toBe(source.length)
     expect(mine.forbiddenCount + mine.avoidCount + mine.preferredCount).toBe(source.length)
 
@@ -374,14 +389,66 @@ describe.skipIf(!nativeOk)('M2 · 教学任务与规则数据层', () => {
   })
 
   // ── 6. M2 验收：完整读出 SolverInput ───────────────────────────────
+  // ── 7. 高完中：初高中两学段并存 ──────────────────────────────────
+  it('高中课时方案只落在高中班，不污染初中班', () => {
+    const juniorTasksBefore = r.taskRepo
+      .listBySemester(ids.semesterId)
+      .filter((t) => ids.classIds.includes(t.classId)).length
+
+    const res = r.taskRepo.applyCurriculum({
+      semesterId: ids.semesterId,
+      planCode: 'senior_g1',
+      gradeIds: [ids.seniorGradeIds[0]],
+      overwrite: true
+    })
+    expect(res.affectedClasses).toBe(4)
+    expect(res.skippedSubjects).toEqual([])
+
+    const tasks = r.taskRepo.listBySemester(ids.semesterId)
+    // 高一方案 17 门（含班会），4 个班各拿到一整套
+    expect(tasks.filter((t) => t.classId === ids.seniorClassIds[0])).toHaveLength(17)
+    // 初中班一条都没被动过
+    expect(tasks.filter((t) => ids.classIds.includes(t.classId))).toHaveLength(juniorTasksBefore)
+    // 通用技术是高中独有学科，初中班不该出现
+    const tech = r.subjectRepo.list().find((s) => s.name === '通用技术')!
+    expect(tasks.some((t) => t.subjectId === tech.id && ids.classIds.includes(t.classId))).toBe(
+      false
+    )
+  })
+
+  it('两学段时段规则互不串台，SolverStage.slotIds 按学段切分', () => {
+    const evening = r.stageRepo.listSlots(ids.seniorStageId).filter((s) => s.segment === 'evening')
+    expect(evening).toHaveLength(15) // 高中 3 节晚自习 × 5 天
+
+    const scope = { scopeType: 'grade' as const, scopeId: ids.seniorGradeIds[0] }
+    r.ruleRepo.setCells(
+      ids.semesterId,
+      scope,
+      evening.slice(0, 3).map((s) => ({ slotId: s.id, ruleValue: 'FORBIDDEN' as const }))
+    )
+    const rules = r.ruleRepo.listByScope(ids.semesterId, scope)
+    expect(rules).toHaveLength(3)
+
+    const input = r.buildSolverInput(ids.semesterId)
+    const jr = input.stages.find((s) => s.code === 'junior')!
+    const sr = input.stages.find((s) => s.code === 'senior')!
+    expect(jr.slotIds).toHaveLength(40)
+    expect(sr.slotIds).toHaveLength(65)
+    // 晚自习槽只属于高中，绝不能混进初中的时段全集
+    expect(
+      rules.every((x) => sr.slotIds.includes(x.slotId) && !jr.slotIds.includes(x.slotId))
+    ).toBe(true)
+  })
+
   it('SolverInput 能完整读出全部 M2 数据', () => {
     const input = r.buildSolverInput(ids.semesterId)
     expect(input.semesterId).toBe(ids.semesterId)
     expect(input.weights.S1).toBe(40)
-    expect(input.classes).toHaveLength(12)
-    expect(input.grades).toHaveLength(3)
+    expect(input.classes).toHaveLength(24) // 初中 12 + 高中 12
+    expect(input.grades).toHaveLength(6)
     expect(input.grades[0].classIds).toHaveLength(4)
     expect(input.stages.find((s) => s.code === 'junior')!.slotIds).toHaveLength(40)
+    expect(input.stages.find((s) => s.code === 'senior')!.slotIds).toHaveLength(65)
     expect(input.tasks.length).toBeGreaterThan(0)
     expect(input.timeRules.length).toBeGreaterThan(0)
     expect(input.fixedLessons).toHaveLength(3)
