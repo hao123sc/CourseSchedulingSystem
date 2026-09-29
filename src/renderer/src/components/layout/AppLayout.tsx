@@ -54,8 +54,9 @@ export function AppLayout(): React.JSX.Element {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
         <main className="min-h-0 min-w-0 flex-1 overflow-auto p-4 lg:p-5 xl:p-6">
-          {/* 超宽屏下限制正文最大宽度，避免一行拉到 3000px 没法读；普通屏幕仍然铺满 */}
-          <div className="mx-auto flex h-full w-full max-w-[1920px] flex-col">
+          {/* 数据页（基础数据 / 教学任务 / 排课规则）铺满整个可视宽度——4K 下表格和矩阵
+              就该用满；阅读型页面（工作台 / 学校设置）由页面自己收窄到 max-w-7xl 并居中 */}
+          <div className="flex h-full w-full flex-col">
             <Outlet />
           </div>
         </main>
