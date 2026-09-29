@@ -2,7 +2,7 @@
 
 > **本文件是项目状态的唯一事实来源（Single Source of Truth）。**
 > 每个会话开始时必须先读本文件；每个会话结束前必须更新本文件并提交。
-> 最后更新：2026-09-29 · **M2 教学任务与规则已完成**（教学任务矩阵 + 四层规则网格 + 学科规则 + 预排锁定 + 约束组 + SolverInput 组装与自检 + `npm run seed:m2` **示范高完中**验收数据）。沙箱侧：typecheck/lint/build/prettier 全绿，单测 49 条纯逻辑用例通过；迁移 005、5 个 Repository 的真实 SQL、种子脚本与 `validateSolverInput` 均经真实 SQLite 引擎跑通（见变更日志 #6 的验证手法）。Electron 起窗口与 UI 手测留待用户真机。M2 收尾提交 `4f1b03a`；测试数据（`seed:test` / `seed:m2` / 单测 fixture）已统一到示范高完中；新增 `npm run test:sqlite` 兜底，沙箱内 **69/69 全部通过**（含此前被 skip 的 20 条数据层集成用例）。用户真机反馈的问题已修复：种子脚本跑完不退出 / Windows 控制台乱码；新增 `npm run db:reset`（清空重置数据）与 `npm run preview:ui`（浏览器里预览渲染层）；全部页面完成窗口缩放 / 最大化 / 全屏自适应改造
+> 最后更新：2026-09-29 · **M2 教学任务与规则已完成**（教学任务矩阵 + 四层规则网格 + 学科规则 + 预排锁定 + 约束组 + SolverInput 组装与自检 + `npm run seed:m2` **示范高完中**验收数据）。沙箱侧：typecheck/lint/build/prettier 全绿，单测 49 条纯逻辑用例通过；迁移 005、5 个 Repository 的真实 SQL、种子脚本与 `validateSolverInput` 均经真实 SQLite 引擎跑通（见变更日志 #6 的验证手法）。Electron 起窗口与 UI 手测留待用户真机。M2 收尾提交 `4f1b03a`；测试数据（`seed:test` / `seed:m2` / 单测 fixture）已统一到示范高完中；新增 `npm run test:sqlite` 兜底，沙箱内 **69/69 全部通过**（含此前被 skip 的 20 条数据层集成用例）。用户真机反馈的问题已修复：种子脚本跑完不退出 / Windows 控制台乱码；新增 `npm run db:reset`（清空重置数据）与 `npm run preview:ui`（浏览器里预览渲染层）；全部页面完成窗口缩放 / 最大化 / 全屏自适应改造（4K + 150% 真机截图复核过一轮）。当前 tip `09d5b9f`，工作区干净、已与远端同步
 
 ---
 
@@ -105,34 +105,53 @@
 | 2026-09-29 | #8 | **测试数据全面对齐示范高完中**（用户指令：更新对应的测试数据）。① 新增 `scripts/lib/demo-school.cjs`——**基础数据的唯一定义**（学校/学期/学段启用/年级班级/教室场地/教师编制/班主任，外加按课时方案推导的「班 × 学科 × 周课时 × 任课教师」清单，只计算不写库），`seed:test` 与 `seed:m2` 一起 require 它，从此不可能再各建各的。② `seed:test` 回归 M1 口径**只铺基础数据**（此前它还停在 `xxx中学` + 200 名按顺序轮转学科的教师，与 M2 基准完全脱节）：现为示范高完中 120 班 / 256 名教师 / 120 名班主任（均任教本班）/ 141 间教室，教师改用**真实中文姓名**（20 姓 × 14 名组合，256 人无重名）、工号 `T0001` 起连续、按学科分池而非轮转。③ `seed:m2` 瘦身为只负责 M2 层（教学任务 / 四层时段规则 / 学科规则与场地绑定 / 预排锁定 / 约束组）。④ 单测 fixture 同步：`m2Repositories.test.ts` 由纯初中改为**初中部 + 高中部各 3 年级 × 4 班 = 24 班**，并新增 2 条两学段并存用例（高中课时方案套用后不污染初中班、两学段时段规则互不串台且 `SolverStage.slotIds` 按学段切分）；`repositories.test.ts` 学校单例用例改 `示范高完中/complete`。**沙箱验证**：除 `node:sqlite` 脚手架的 16 条种子断言全绿（两脚本各自幂等、可任意先后混跑、基础数据逐字节一致、`validateSolverInput` 仍 `ok=true` 零 error）外，本轮还发现只要给 vitest 挂一个把 `better-sqlite3` 别名到 `node:sqlite` 壳的临时 config（**临时文件用完即删，未入库**），**平时被 skip 的 20 条数据层集成用例可以在沙箱真跑**——`npx vitest run` 9 个测试文件 **69/69 全部通过**，即新写的两学段用例是真的验过、不是只过了类型检查。typecheck / eslint / prettier 全绿。分支 tip `1eca2c3` |
 | 2026-09-29 | #9 | **新增 `npm run test:sqlite`（用户拍板固化）**。把 #8 里临时验证用的驱动替换做成仓库正式能力：`scripts/test/node-sqlite-driver.cjs`（基于 Node 22.5+ 内置 `node:sqlite` 的 better-sqlite3 兼容壳，抹平 `pragma()` / 可调用 `transaction()` 且支持嵌套 / `undefined→null` / `boolean→0/1` / null 原型行转普通对象 / **按 SQL 文本过滤多余命名参数**这几处 API 形状差异，并劫持 `Module._load` 让测试里的原生模块探针也走它）+ `vitest.sqlite.config.ts`（`mergeConfig` 复用 `vitest.config.ts`，只加 alias 与 setupFiles）。**只换驱动、不动任何产品代码**，跑的仍是真实迁移 001~005、真实 Repository、真实 `solverInputService`。效果：`npm test` 在沙箱仍是 49 passed / 19 skipped / 1 failed（无原生模块，既有行为不变），`npm run test:sqlite` 则 **9 个文件 69/69 全过**。文档同步：README 补命令块与演示数据脚本说明、修掉 README 里"当前进入 M1"的过期状态（改为 M0/M1/M2 已完成、下一步 M3）、docs/08 §8 排障表写明用法与"它是兜底不是等价物，有原生模块请以 `npm test` 为准"。⚠️ 仍需注意：生产运行时用的依旧是 `better-sqlite3`，该命令不替代真机验证。② 顺带把两个种子脚本的 `require('electron')` 改成「给了 `ZHIKEPAI_DB` 就允许脱离 electron 在纯 Node 下直跑」，配合上面的驱动壳，以后校验种子逻辑不用再临时搭脚手架：`ZHIKEPAI_DB=/tmp/x.db node -r ./scripts/test/node-sqlite-driver.cjs scripts/seed-m2-demo.cjs`（用法已写进 docs/08 §8）。③ 用这条路径复验时发现并修掉一个分层残留：`seed:test` 原先只靠 `grade` 级联删除带走教学任务，`time_rule` / `fixed_lesson` / `constraint_group` / `subject_classroom` 会留下指向已删年级班级的**孤儿行**；现已在同一事务内一并清理，`seed:m2 → seed:test` 之后四张表确实归零，真正退回 M1 基础数据层。分支 tip `f09f998` |
 | 2026-09-29 | #10 | **修两个真机问题（用户在 Win11 跑 `npm run seed:test` 实测反馈）**。① **跑完不退出、终端卡死只能强杀**：#8 重写种子脚本时把原有的 `app.whenReady().then(() => { main(); app.exit(0) })` 结构弄丢了，退化成顶层直接 `main()`——electron 不开窗口也不会自己结束进程。**属上一轮引入的回归**，现已恢复并补上失败分支 `app.exit(1)`。② **控制台中文全部乱码**：Windows 控制台默认代码页 936(GBK)，脚本输出的 UTF-8 中文会花屏；现在打印前先 `chcp 65001`（拿不到控制台时静默跳过）。③ 顺带：摘要改 `fs.writeSync(1, ...)` 同步输出（`app.exit()` 立即终止进程，Windows 上 stdout 走管道时 `console.log` 是异步的，尾部可能被截断）；标签列按**显示宽度**补空格（中文占 2 列，原 `padEnd` 对不齐）；「没有 electron 又没给 ZHIKEPAI_DB」的报错换成可操作提示。以上共用逻辑抽到 `scripts/lib/cli.cjs`（`runSeed`/`printSummary`），两个种子脚本各减 12 行。**教训**：重写既有脚本时要逐条核对原版的进程生命周期处理（退出码、ready 时机、编码），这类代码在沙箱里跑不出来，只有真机会暴露。分支 tip `5e57197` |
-| 2026-09-29 | #11 | **数据清除脚本 + 全局响应式适配 + 浏览器预览模式（用户指令）**。① `npm run db:reset`（`scripts/reset-data.cjs`）三种力度：默认清业务数据保留内置字典、`--all` 连字典一起清并恢复出厂、`--hard` 删库文件重建；另有 `--dry-run` 只统计、`--yes` 跳过倒计时；执行前后按表对照行数。② **响应式**：此前整套界面按 1440×900 写死——正文卡在 `max-w-6xl` 窄条里、窗口拉大两侧大片留白，拉小则表格被压扁、定宽栅格溢出。现统一为：外壳 `h-[100dvh]` + `w-full`（`h-screen`/`w-screen` 在全屏与带滚动条时都会算错）、各级 flex 补 `min-w-0`/`min-h-0`、正文限宽收归 AppLayout（1920px）、表单栅格一律 `grid-cols-1 sm:grid-cols-2`、表格补横向滚动 + 表头吸顶、矩阵与 RuleGrid 改 `flex-1 + min-h-0` 吃满剩余高度（原 `max-h-62vh` 大屏浪费小屏放不下）、弹窗改 `min(92vw,32rem)`/`85dvh`；新增 `uiStore`：界面缩放 80%~150%（`Ctrl + =/-/0`、`Ctrl+滚轮`）与侧边栏折叠，均记 localStorage，**缩放实现为改根字号**（Tailwind 多为 rem，整体等比缩放）。约定已写进 docs/05 §2.5。③ **`npm run preview:ui`**：`vite.preview.config.ts` + `scripts/dev/ipc-bridge.cjs` 用 esbuild 把真实主进程 IPC 层打包，只把 electron 换成桩、better-sqlite3 换成 node:sqlite 壳，`POST /api/ipc` 直接调真 handler、读真 `.local-data/data.db`；渲染层 `lib/api.ts` 在 `window.zhikepai` 缺失时退回 HTTP 桥（`import.meta.env.DEV` 守卫，**已验证生产包里搜不到 `api/ipc`**）。从此沙箱/CI 也能看 UI、验证响应式。**局限**：Excel 导入导出需系统对话框，预览里返回"已取消"；沙箱无浏览器，布局最终仍需用户肉眼确认。typecheck/lint/build 全绿，`npm run test:sqlite` 69/69。分支 tip 见下方提交 |
+| 2026-09-29 | #11 | **数据清除脚本 + 全局响应式适配 + 浏览器预览模式（用户指令）**。① `npm run db:reset`（`scripts/reset-data.cjs`）三种力度：默认清业务数据保留内置字典、`--all` 连字典一起清并恢复出厂、`--hard` 删库文件重建；另有 `--dry-run` 只统计、`--yes` 跳过倒计时；执行前后按表对照行数。② **响应式**：此前整套界面按 1440×900 写死——正文卡在 `max-w-6xl` 窄条里、窗口拉大两侧大片留白，拉小则表格被压扁、定宽栅格溢出。现统一为：外壳 `h-[100dvh]` + `w-full`（`h-screen`/`w-screen` 在全屏与带滚动条时都会算错）、各级 flex 补 `min-w-0`/`min-h-0`、正文限宽收归 AppLayout（1920px）、表单栅格一律 `grid-cols-1 sm:grid-cols-2`、表格补横向滚动 + 表头吸顶、矩阵与 RuleGrid 改 `flex-1 + min-h-0` 吃满剩余高度（原 `max-h-62vh` 大屏浪费小屏放不下）、弹窗改 `min(92vw,32rem)`/`85dvh`；新增 `uiStore`：界面缩放 80%~150%（`Ctrl + =/-/0`、`Ctrl+滚轮`）与侧边栏折叠，均记 localStorage，**缩放实现为改根字号**（Tailwind 多为 rem，整体等比缩放）。约定已写进 docs/05 §2.5。③ **`npm run preview:ui`**：`vite.preview.config.ts` + `scripts/dev/ipc-bridge.cjs` 用 esbuild 把真实主进程 IPC 层打包，只把 electron 换成桩、better-sqlite3 换成 node:sqlite 壳，`POST /api/ipc` 直接调真 handler、读真 `.local-data/data.db`；渲染层 `lib/api.ts` 在 `window.zhikepai` 缺失时退回 HTTP 桥（`import.meta.env.DEV` 守卫，**已验证生产包里搜不到 `api/ipc`**）。从此沙箱/CI 也能看 UI、验证响应式。**局限**：Excel 导入导出需系统对话框，预览里返回"已取消"；沙箱无浏览器，布局最终仍需用户肉眼确认。typecheck/lint/build 全绿，`npm run test:sqlite` 69/69。分支 tip `0ea75d3` |
+| 2026-09-29 | #12 | **按用户 4K（150% 缩放）最大化截图复核并修 4 处**。① **幽灵滚动条**：页签条右端冒出一条竖直滚动条——`overflow-x-auto` 会让 `overflow-y` 也算成 `auto`（CSS 规范：一轴非 visible 时另一轴的 visible 计算为 auto），页签 `-mb-px` 在 150% 缩放下取整成 1.5px，半像素溢出就够触发。页签改 `flex-wrap`（本来就只有 4~5 个），另外三处容器显式补 `overflow-y-hidden`。**属 #11 引入的回归**。② **RuleGrid 被拉满整行**：原本 `inline-block` 宽度贴合网格，#11 改块级后小学 7×5 的网格右边空出一大片，改回 `w-fit`。**同属 #11 回归**。③ **默认学段落在已停用的小学上**：时段规则/预排锁定/新建年级三处改为优先选中 `enabled` 的学段。④ **4K 留白**：数据页（基础数据/教学任务/排课规则）取消 1920px 限宽改为铺满，工作台两卡 xl 起并排、学校设置 2xl 起两列，两页自身限宽 `max-w-7xl`；工作台副标题去掉过期的"M0 工程骨架"。**教训**：`overflow-x-auto` 不是无副作用的，高 DPI 缩放下的亚像素误差只有真机看得见——UI 改动务必让用户在真实分辨率下截图复核一轮。分支 tip `09d5b9f` |
 
 ---
 
 ## 七、下个会话的第一条指令
 
-M2 已关闭，下一个里程碑是 M3。新会话直接说：
+M2 已关闭，下一个里程碑是 **M3 · 排课引擎 v1（无冲突）**。新会话把下面整段复制过去：
 
 ```
-这是一个跨会话的项目。请先读 PROGRESS.md、docs/08-会话交接指南.md、
-docs/04-排课算法设计.md 与 docs/06-开发计划.md 中 M3 对应章节，
-然后 git log --oneline -10 看最近提交，复述这次要做什么、验收标准、
-注意事项，等我确认后再开始写代码。
+这是一个跨会话的项目。请先按顺序读 PROGRESS.md、docs/08-会话交接指南.md、
+docs/04-排课算法设计.md、docs/06-开发计划.md 的 M3 章节、docs/next-session-M3.md，
+再跑 git log --oneline -12 看最近提交，然后用不超过 10 行复述：这次做什么、
+验收标准是什么、有哪些坑，等我确认后再开始写代码。
 
-执行 M3 排课引擎 v1（无冲突）。输入已经就绪：主进程 solverInputService
-能把整个学期组装成 SolverInput 快照，src/solver/model/types.ts 是它的纯类型，
-validate.ts 是入口自检；用 npm run seed:m2 可以一键铺出**示范高完中**的验收数据
-（初中+高中共 120 班 / 1520 条教学任务 3900 节 / 373 条四层规则 /
-186 条预排占位 / 3 个约束组，两套作息同时在跑）。
-先把 D3 定的 AC-3 预处理 → DSATUR 构造这两段做出来，目标是
-H1~H11 硬约束零违反、**能同时排完初中部与高中部共 120 班**，软约束优化留给 M5。
+执行 M3 排课引擎 v1（无冲突）。
+
+输入已经就绪，不要重做：
+- src/solver/model/types.ts 是 SolverInput 的纯类型（零 Node/Electron 依赖）
+- src/main/services/solverInputService.ts 能把整个学期组装成 SolverInput 快照
+- src/solver/model/validate.ts 是入口自检，18 种 issue code
+- src/shared/constraints/ 是冲突判定的唯一一份实现，引擎直接复用，别另写一套
+
+验收数据一条命令铺好：npm run seed:m2
+  示范高完中 = 初中部 + 高中部各 3 年级 × 20 班 = 120 班、256 名教师、
+  1520 条教学任务 3900 节/周、373 条四层时段规则、186 条预排占位、3 个约束组，
+  初中 40 槽/周 与 高中 65 槽/周 两套作息同时在跑。
+  数据乱了就 npm run db:reset 清掉重铺。
+
+这次的目标：按 D3 定的 AC-3 预处理 → DSATUR 贪心构造 → min-conflicts 修复，
+做到 H1~H11 硬约束零违反，且**初中部与高中部 120 班能一次排完**；
+软约束优化留到 M5，本轮不做。
 ```
 
-> 提醒：
-> 1. 若新会话分支缺上一步代码，先 `git ls-remote --heads origin` 找到含最新代码的
->    同级会话分支，`git merge --ff-only` 并入当前分支，**不要切换分支**。
-> 2. 沙箱无法编译 `better-sqlite3` 原生模块：`connection.test.ts` 会报红、
->    `repositories.test.ts` / `m2Repositories.test.ts` 会自动 skip——已知现象，真机/CI 正常。
->    M3 的引擎代码是纯 TS 零 IO，**不受这条限制，单测必须真跑真绿**。
-> 3. `src/solver/**` 禁止 import Electron/Node 模块（worker 入口除外）；
->    冲突判定逻辑只有 `src/shared/constraints` 一份，引擎直接复用，不要另写一套。
+> 开工前务必知道的 5 条：
+>
+> 1. **分支**：只在当前会话分配到的分支上工作，不切换不新建。若本分支缺上一步代码，
+>    先 `git ls-remote --heads origin` 找到含最新代码的同级会话分支，
+>    用 `git merge --ff-only` 并入当前分支。
+> 2. **每完成一个逻辑单元就 commit + push**，不要攒到会话末尾——沙箱出现过
+>    `.git` 回退到分支起点的情况（工作区文件还在），推送过就能无损恢复，
+>    恢复步骤见 docs/08 §8。
+> 3. **测试**：`npm test` 在无原生模块的机器上会 skip 掉数据层集成用例；
+>    要真跑用 `npm run test:sqlite`（Node ≥ 22.5，只换 sqlite 驱动）。
+>    M3 的引擎代码是纯 TS 零 IO，**不受任何沙箱限制，单测必须真跑真绿**。
+> 4. **看 UI**：沙箱起不了 Electron，用 `npm run preview:ui` 在浏览器里看渲染层
+>    （走真实 IPC + 真实库）。但**高 DPI 下的布局问题只有真机看得见**，
+>    UI 改完要请用户在他的 4K/150% 环境下截图复核（见变更日志 #12 的教训）。
+> 5. **纪律**：`src/solver/**` 禁止 import Electron/Node 模块（worker 入口除外）；
+>    DB 变更一律新增 migration（下一个编号 006）；不得推翻已锁定的 D1~D8。
