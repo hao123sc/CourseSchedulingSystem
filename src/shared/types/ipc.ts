@@ -14,13 +14,21 @@ import type {
   Classroom,
   ClassroomInput,
   ClassBatchInput,
+  ConstraintGroup,
+  ConstraintGroupInput,
+  CurriculumApplyResult,
   ExcelExportResult,
   ExcelImportResult,
+  FixedLesson,
+  FixedLessonInput,
   Grade,
   GradeInput,
   Klass,
   KlassInput,
+  MatrixCellPatch,
   PeriodTemplate,
+  RuleScopeRef,
+  RuleScopeSummary,
   School,
   SchoolInput,
   Semester,
@@ -28,12 +36,22 @@ import type {
   Stage,
   StageInput,
   Subject,
+  SubjectClassroom,
   SubjectInput,
+  SubjectRulePatch,
   Teacher,
   TeacherInput,
+  TeacherWorkload,
+  TeachingTask,
+  TeachingTaskInput,
+  TimeRule,
+  TimeRulePatch,
   TimeSlot,
   WeightProfile
 } from './entities'
+import type { FixedLessonConflict } from '../constraints'
+import type { SolverInput } from '../../solver/model/types'
+import type { SolverInputReport } from '../../solver/model/validate'
 
 /** M0：系统自检，验证主进程存活与版本信息可读 */
 export interface SystemPingResult {
@@ -115,14 +133,79 @@ export interface IpcApi {
   'classroom:exportExcel': () => ExcelExportResult
   'classroom:importExcel': () => ExcelImportResult
 
-  // ---- 教学任务 / 规则（M2 占位） ----
-  // 'matrix:get': (semesterId: number) => TeachingMatrix
-  // 'matrix:set': (cells: MatrixCell[]) => void
-  // 'rule:getTimeGrid': (scope: unknown) => unknown
-  // 'rule:setTimeGrid': (scope: unknown, grid: unknown) => void
+  // ---- 教学任务矩阵（M2） ----
+  'task:list': (semesterId: number) => TeachingTask[]
+  'task:upsert': (payload: TeachingTaskInput) => TeachingTask
+  'task:delete': (id: number) => void
+  /** 矩阵批量提交：weeklyPeriods=0 删除、teacherId=undefined 保留原值 */
+  'task:applyMatrix': (semesterId: number, patches: MatrixCellPatch[]) => TeachingTask[]
+  /** 教师指派器「应用到整列/选区」 */
+  'task:assignTeacher': (
+    semesterId: number,
+    cells: { classId: number; subjectId: number }[],
+    teacherId: number | null
+  ) => TeachingTask[]
+  'task:clear': (semesterId: number, gradeIds?: number[]) => number
+  /** 国家课程标准课时方案一键套用 */
+  'task:applyCurriculum': (payload: {
+    semesterId: number
+    planCode: string
+    gradeIds: number[]
+    overwrite: boolean
+    entries?: { subject: string; periods: number }[]
+  }) => CurriculumApplyResult
+  /** 教师工作量看板 */
+  'task:workloads': (semesterId: number) => TeacherWorkload[]
+
+  // ---- 四层时段规则（M2，决策 D4） ----
+  'timeRule:listByScope': (semesterId: number, scope: RuleScopeRef) => TimeRule[]
+  'timeRule:listBySemester': (semesterId: number) => TimeRule[]
+  'timeRule:setCells': (
+    semesterId: number,
+    scope: RuleScopeRef,
+    patches: TimeRulePatch[]
+  ) => TimeRule[]
+  'timeRule:clearScope': (semesterId: number, scope: RuleScopeRef) => number
+  'timeRule:copyScope': (
+    semesterId: number,
+    from: RuleScopeRef,
+    targets: RuleScopeRef[]
+  ) => number
+  'timeRule:summary': (semesterId: number) => RuleScopeSummary[]
+
+  // ---- 学科规则（M2） ----
+  'subjectRule:save': (patches: SubjectRulePatch[]) => number
+  'subjectRule:listClassrooms': () => SubjectClassroom[]
+  'subjectRule:setClassrooms': (
+    subjectId: number,
+    bindings: { classroomId: number; slotsTaken: number; priority: number }[]
+  ) => SubjectClassroom[]
+  /** 把连堂设置批量下发到该学科的教学任务，返回受影响的任务数 */
+  'subjectRule:applyConsecutive': (payload: {
+    semesterId: number
+    subjectId: number
+    gradeIds?: number[]
+    consecutiveCount: number
+    consecutiveSize: number
+  }) => number
+
+  // ---- 预排锁定 fixed_lesson（M2） ----
+  'fixedLesson:list': (semesterId: number) => FixedLesson[]
+  'fixedLesson:upsert': (payload: FixedLessonInput) => FixedLesson
+  'fixedLesson:delete': (id: number) => void
+  'fixedLesson:bulkCreate': (payloads: FixedLessonInput[]) => FixedLesson[]
+  'fixedLesson:conflicts': (semesterId: number) => FixedLessonConflict[]
+
+  // ---- 约束组（M2） ----
+  'constraintGroup:list': (semesterId: number) => ConstraintGroup[]
+  'constraintGroup:upsert': (payload: ConstraintGroupInput) => ConstraintGroup
+  'constraintGroup:delete': (id: number) => void
+
+  // ---- 引擎输入快照（M2 只做「读出 + 自检」，求解在 M3） ----
+  'solver:buildInput': (semesterId: number, weightProfileCode?: string) => SolverInput
+  'solver:checkInput': (semesterId: number, weightProfileCode?: string) => SolverInputReport
 
   // ---- 排课（M3/M5 占位） ----
-  // 'schedule:selfCheck': (semesterId: number) => unknown
   // 'schedule:start': (p: unknown) => { taskId: string }
   // 'schedule:cancel': (taskId: string) => void
 

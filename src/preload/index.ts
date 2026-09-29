@@ -64,7 +64,57 @@ const zhikepaiApi: {
   'class:exportExcel': (semesterId) => ipcRenderer.invoke('class:exportExcel', semesterId),
   'class:importExcel': (semesterId) => ipcRenderer.invoke('class:importExcel', semesterId),
   'classroom:exportExcel': () => ipcRenderer.invoke('classroom:exportExcel'),
-  'classroom:importExcel': () => ipcRenderer.invoke('classroom:importExcel')
+  'classroom:importExcel': () => ipcRenderer.invoke('classroom:importExcel'),
+
+  // ---- 教学任务矩阵（M2） ----
+  'task:list': (semesterId) => ipcRenderer.invoke('task:list', semesterId),
+  'task:upsert': (p) => ipcRenderer.invoke('task:upsert', p),
+  'task:delete': (id) => ipcRenderer.invoke('task:delete', id),
+  'task:applyMatrix': (semesterId, patches) =>
+    ipcRenderer.invoke('task:applyMatrix', semesterId, patches),
+  'task:assignTeacher': (semesterId, cells, teacherId) =>
+    ipcRenderer.invoke('task:assignTeacher', semesterId, cells, teacherId),
+  'task:clear': (semesterId, gradeIds) => ipcRenderer.invoke('task:clear', semesterId, gradeIds),
+  'task:applyCurriculum': (p) => ipcRenderer.invoke('task:applyCurriculum', p),
+  'task:workloads': (semesterId) => ipcRenderer.invoke('task:workloads', semesterId),
+
+  // ---- 四层时段规则（M2） ----
+  'timeRule:listByScope': (semesterId, scope) =>
+    ipcRenderer.invoke('timeRule:listByScope', semesterId, scope),
+  'timeRule:listBySemester': (semesterId) =>
+    ipcRenderer.invoke('timeRule:listBySemester', semesterId),
+  'timeRule:setCells': (semesterId, scope, patches) =>
+    ipcRenderer.invoke('timeRule:setCells', semesterId, scope, patches),
+  'timeRule:clearScope': (semesterId, scope) =>
+    ipcRenderer.invoke('timeRule:clearScope', semesterId, scope),
+  'timeRule:copyScope': (semesterId, from, targets) =>
+    ipcRenderer.invoke('timeRule:copyScope', semesterId, from, targets),
+  'timeRule:summary': (semesterId) => ipcRenderer.invoke('timeRule:summary', semesterId),
+
+  // ---- 学科规则（M2） ----
+  'subjectRule:save': (patches) => ipcRenderer.invoke('subjectRule:save', patches),
+  'subjectRule:listClassrooms': () => ipcRenderer.invoke('subjectRule:listClassrooms'),
+  'subjectRule:setClassrooms': (subjectId, bindings) =>
+    ipcRenderer.invoke('subjectRule:setClassrooms', subjectId, bindings),
+  'subjectRule:applyConsecutive': (p) => ipcRenderer.invoke('subjectRule:applyConsecutive', p),
+
+  // ---- 预排锁定（M2） ----
+  'fixedLesson:list': (semesterId) => ipcRenderer.invoke('fixedLesson:list', semesterId),
+  'fixedLesson:upsert': (p) => ipcRenderer.invoke('fixedLesson:upsert', p),
+  'fixedLesson:delete': (id) => ipcRenderer.invoke('fixedLesson:delete', id),
+  'fixedLesson:bulkCreate': (ps) => ipcRenderer.invoke('fixedLesson:bulkCreate', ps),
+  'fixedLesson:conflicts': (semesterId) => ipcRenderer.invoke('fixedLesson:conflicts', semesterId),
+
+  // ---- 约束组（M2） ----
+  'constraintGroup:list': (semesterId) => ipcRenderer.invoke('constraintGroup:list', semesterId),
+  'constraintGroup:upsert': (p) => ipcRenderer.invoke('constraintGroup:upsert', p),
+  'constraintGroup:delete': (id) => ipcRenderer.invoke('constraintGroup:delete', id),
+
+  // ---- 引擎输入快照（M2） ----
+  'solver:buildInput': (semesterId, code) =>
+    ipcRenderer.invoke('solver:buildInput', semesterId, code),
+  'solver:checkInput': (semesterId, code) =>
+    ipcRenderer.invoke('solver:checkInput', semesterId, code)
 }
 
 if (process.contextIsolated) {

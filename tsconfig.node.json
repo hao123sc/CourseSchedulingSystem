@@ -5,13 +5,15 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/preload/electron.d.ts",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "src/solver/**/*"
   ],
   "compilerOptions": {
     "types": ["electron-vite/node", "node"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@solver/*": ["src/solver/*"]
     }
   }
 }
