@@ -8,8 +8,8 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { path: '/', label: '工作台', icon: '🏠', implemented: true },
-  { path: '/setup', label: '学校设置', icon: '⚙️', implemented: false },
-  { path: '/base-data', label: '基础数据', icon: '📚', implemented: false },
+  { path: '/setup', label: '学校设置', icon: '⚙️', implemented: true },
+  { path: '/base-data', label: '基础数据', icon: '📚', implemented: true },
   { path: '/teaching-matrix', label: '教学任务', icon: '📋', implemented: false },
   { path: '/rules', label: '排课规则', icon: '🔧', implemented: false },
   { path: '/scheduling', label: '开始排课', icon: '▶️', implemented: false },
