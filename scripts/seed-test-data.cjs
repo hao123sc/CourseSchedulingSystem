@@ -38,7 +38,8 @@ const MIGRATIONS = [
   { version: 1, file: '001_init.sql' },
   { version: 2, file: '002_seed_stages.sql' },
   { version: 3, file: '003_seed_subjects.sql' },
-  { version: 4, file: '004_seed_weights.sql' }
+  { version: 4, file: '004_seed_weights.sql' },
+  { version: 5, file: '005_m2_rules.sql' }
 ]
 
 function runMigrations(db) {
