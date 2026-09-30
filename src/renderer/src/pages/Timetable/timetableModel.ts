@@ -32,6 +32,10 @@ export interface SlotAxis {
 export interface GridLesson {
   key: string
   lessonId: number | null
+  /** 关联实体 ID，用于在班级 / 教师课表之间快速跳转 */
+  classId: number | null
+  teacherId: number | null
+  classroomId: number | null
   slotId: number
   subjectId: number | null
   subjectName: string
@@ -181,6 +185,9 @@ export function buildEntityGrid(
       {
         key: `l${l.id}`,
         lessonId: l.id,
+        classId: l.classId,
+        teacherId: l.teacherId,
+        classroomId: l.classroomId,
         slotId: l.slotId,
         subjectId: l.subjectId,
         subjectName: subject?.name ?? '课程',
@@ -261,6 +268,9 @@ export function buildEntityGrid(
       {
         key: `f${f.id}`,
         lessonId: null,
+        classId: f.classId,
+        teacherId: f.teacherId,
+        classroomId: f.classroomId,
         slotId: f.slotId,
         subjectId: f.subjectId ?? null,
         subjectName: subject?.name ?? f.label ?? '预排占位',

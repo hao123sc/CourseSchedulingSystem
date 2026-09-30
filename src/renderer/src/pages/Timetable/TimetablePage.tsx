@@ -49,6 +49,7 @@ export function TimetablePage(): React.JSX.Element {
   const [draggingLesson, setDraggingLesson] = useState<GridLesson | null>(null)
   const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null)
   const history = useRef(new AdjustmentHistory(50))
+  const pendingRelatedJump = useRef<{ view: 'class' | 'teacher'; targetId: number; stageId: number | null } | null>(null)
 
   useEffect(() => {
     if (!loaded) void load()
@@ -206,11 +207,38 @@ export function TimetablePage(): React.JSX.Element {
 
   // 视图切换：清掉手选实体 / 手选学段，回到派生默认
   useEffect(() => {
-    setTargetId(null)
-    setStageId(null)
+    const jump = pendingRelatedJump.current
+    if (jump?.view === view) {
+      setTargetId(jump.targetId)
+      setStageId(jump.stageId)
+      pendingRelatedJump.current = null
+    } else {
+      setTargetId(null)
+      setStageId(null)
+    }
     setSelected(null)
     setSearch('')
   }, [view])
+
+  const openRelatedTimetable = (lesson: GridLesson): void => {
+    if (view === 'class' && lesson.teacherId != null) {
+      pendingRelatedJump.current = {
+        view: 'teacher',
+        targetId: lesson.teacherId,
+        stageId: lesson.classId != null ? stageOfClass.get(lesson.classId) ?? null : null
+      }
+      setView('teacher')
+      setAdjustmentNotice('已跳转到该教师课表')
+    } else if (view === 'teacher' && lesson.classId != null) {
+      pendingRelatedJump.current = {
+        view: 'class',
+        targetId: lesson.classId,
+        stageId: stageOfClass.get(lesson.classId) ?? null
+      }
+      setView('class')
+      setAdjustmentNotice('已跳转到该班级课表')
+    }
+  }
 
   const axis = useMemo(
     () => (activeStageId != null ? buildSlotAxis(meta.slotsByStage[activeStageId] ?? []) : null),
@@ -565,6 +593,7 @@ export function TimetablePage(): React.JSX.Element {
                       if (lesson.lessonId != null) setDraggingLesson(lesson)
                     }}
                     onDragEnd={() => setDraggingLesson(null)}
+                    onOpenRelated={openRelatedTimetable}
                     onDrop={handleDrop}
                     waterfall
                   />

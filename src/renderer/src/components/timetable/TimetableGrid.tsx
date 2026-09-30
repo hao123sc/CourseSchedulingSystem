@@ -25,6 +25,7 @@ export function TimetableGrid({
   dropSlots,
   onDragStart,
   onDragEnd,
+  onOpenRelated,
   onDrop
 }: {
   axis: SlotAxis
@@ -39,6 +40,7 @@ export function TimetableGrid({
   dropSlots?: Set<number> | null
   onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
   onDragEnd?: () => void
+  onOpenRelated?: (lesson: GridLesson) => void
   onDrop?: (slotId: number) => void
 }): React.JSX.Element {
   const today = todayHighlight(axis.days)
@@ -125,6 +127,7 @@ export function TimetableGrid({
                             onSelect={onSelect}
                             onDragStart={onDragStart}
                             onDragEnd={onDragEnd}
+                            onOpenRelated={onOpenRelated}
                           />
                         ))
                       ) : isGap ? (

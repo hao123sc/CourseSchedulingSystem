@@ -19,7 +19,8 @@ export function LessonCard({
   stack,
   onSelect,
   onDragStart,
-  onDragEnd
+  onDragEnd,
+  onOpenRelated
 }: {
   lesson: GridLesson
   selected: boolean
@@ -30,6 +31,7 @@ export function LessonCard({
   onSelect?: (l: GridLesson) => void
   onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
   onDragEnd?: () => void
+  onOpenRelated?: (lesson: GridLesson) => void
 }): React.JSX.Element {
   const span = lesson.blockSize > 1 && stack == null
   const compact = stack != null && stack.count > 1
@@ -61,10 +63,11 @@ export function LessonCard({
           : {}),
         ...(waterfallIndex >= 0 ? { animationDelay: `${Math.min(waterfallIndex, 40) * 24}ms` } : {})
       }}
-      title={lesson.title + (lesson.meta ? ` · ${lesson.meta}` : '')}
+      title={lesson.title + (lesson.meta ? ` · ${lesson.meta}` : '') + (onOpenRelated && !lesson.overlay ? ' · 双击跳转关联课表' : '')}
       draggable={Boolean(onDragStart && !lesson.locked && !lesson.overlay)}
       onDragStart={(event) => onDragStart?.(lesson, event)}
       onDragEnd={onDragEnd}
+      onDoubleClick={() => onOpenRelated?.(lesson)}
       onClick={() => onSelect?.(lesson)}
     >
       {span && lesson.blockIndex === 0 && <span className="tt-tag">连堂</span>}
