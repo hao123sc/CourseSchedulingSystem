@@ -219,7 +219,7 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
   // 后续可由 Worker 按规模动态分配更大的预算。
   const remaining = Math.max(0, budget - (now() - started) - 10)
   if (
-    options.qualityOptimize !== false &&
+    options.qualityOptimize === true &&
     best.unplaced.length === 0 &&
     best.violations.length === 0 &&
     remaining > 0

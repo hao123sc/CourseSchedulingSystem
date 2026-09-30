@@ -1,9 +1,11 @@
 /** M5 质量优化：ALNS → LAHC → Polish。硬约束校验是每个候选的门禁。 */
 import type { SolverContext } from './context'
+import { countAccidentalBlocks } from './adjacency'
 import { cloneSolution, type Solution } from '../model/solution'
 import { verifyHardConstraints } from './verify'
 import { createRng, type Rng } from './random'
 import { scoreSolution } from './scorer'
+import { measureQuality } from './qualityMetrics'
 import { move, swap } from './moves'
 
 export interface OptimizeOptions {
@@ -27,6 +29,23 @@ function randomItem<T>(items: readonly T[], rng: Rng): T | undefined {
 
 function valid(ctx: SolverContext, solution: Solution): boolean {
   return verifyHardConstraints(ctx, solution).length === 0 && solution.unplaced.length === 0
+}
+
+function objective(
+  ctx: SolverContext,
+  solution: Solution,
+  score: ReturnType<typeof scoreSolution>
+): number {
+  const quality = measureQuality(ctx, solution)
+  const teacherLimit = Math.max(1, ctx.input.teachers.length * 0.3)
+  return (
+    countAccidentalBlocks(ctx, solution) * 1_000_000 +
+    score.total +
+    Math.max(0, quality.maxTeacherDayPeriods - 6) * 10_000 +
+    Math.max(0, quality.teacherGapCount - teacherLimit) * 100 +
+    Math.max(0, quality.sameSubjectDayRepeatRate - 0.05) * 100_000 +
+    Math.max(0, 0.7 - quality.importantMorningRate) * 100_000
+  )
 }
 
 function candidateMove(ctx: SolverContext, current: Solution, rng: Rng) {
@@ -62,17 +81,22 @@ export function optimizeQuality(
 ): OptimizeResult {
   const now = options.now ?? (() => Date.now())
   const started = now()
-  const deadline = started + (options.timeBudgetMs ?? 1_000)
+  const budget = options.timeBudgetMs ?? 1_000
+  const deadline = started + budget
+  const alnsDeadline = started + budget * 0.5
+  const lahcDeadline = started + budget * 0.8
   const rng = createRng(options.seed ?? initial.seed)
   let current = cloneSolution(initial)
   let best = cloneSolution(initial)
   let currentScore = scoreSolution(ctx, current)
   let bestScore = currentScore
+  let currentObjective = objective(ctx, current, currentScore)
+  let bestObjective = currentObjective
   let iterations = 0
 
   // ALNS：destroy/repair 在当前实现中由大邻域随机 move/swap 组成，自适应选择由成功率体现。
   const operatorSuccess = [1, 1]
-  while (now() < deadline && !options.cancelled?.()) {
+  while (now() < alnsDeadline && !options.cancelled?.()) {
     const op = rng.next() < operatorSuccess[0] / (operatorSuccess[0] + operatorSuccess[1]) ? 0 : 1
     const mv = candidateMove(ctx, current, rng)
     if (!mv) break
@@ -84,22 +108,23 @@ export function optimizeQuality(
       continue
     }
     const score = scoreSolution(ctx, trial)
+    const trialObjective = objective(ctx, trial, score)
     const temperature = Math.max(
       0.01,
-      Math.abs(currentScore.total) *
-        0.05 *
-        (1 - (now() - started) / Math.max(1, deadline - started))
+      Math.abs(currentObjective) * 0.05 * (1 - (now() - started) / Math.max(1, deadline - started))
     )
     const accept =
-      score.total <= currentScore.total ||
-      rng.next() < Math.exp((currentScore.total - score.total) / temperature)
+      trialObjective <= currentObjective ||
+      rng.next() < Math.exp((currentObjective - trialObjective) / temperature)
     if (accept) {
       current = trial
       currentScore = score
-      operatorSuccess[op] += score.total < bestScore.total ? 3 : 1
-      if (score.total < bestScore.total) {
+      currentObjective = trialObjective
+      operatorSuccess[op] += trialObjective < bestObjective ? 3 : 1
+      if (trialObjective < bestObjective) {
         best = cloneSolution(trial)
         bestScore = score
+        bestObjective = trialObjective
       }
     }
     iterations++
@@ -107,21 +132,23 @@ export function optimizeQuality(
   }
 
   // LAHC：历史成本门槛，避免只接受单调下降导致早熟。
-  const history = new Float64Array(256).fill(bestScore.total)
+  const history = new Float64Array(256).fill(bestObjective)
   let i = 0
-  while (now() < deadline && !options.cancelled?.()) {
+  while (now() < lahcDeadline && !options.cancelled?.()) {
     const mv = candidateMove(ctx, best, rng)
     if (!mv) break
     const trial = cloneSolution(best)
     mv.apply(trial)
     if (valid(ctx, trial)) {
       const score = scoreSolution(ctx, trial)
+      const trialObjective = objective(ctx, trial, score)
       const slot = i % history.length
-      if (score.total <= history[slot]) {
+      if (trialObjective <= history[slot]) {
         best = trial
         bestScore = score
+        bestObjective = trialObjective
       }
-      history[slot] = bestScore.total
+      history[slot] = bestObjective
     }
     i++
     iterations++
@@ -148,9 +175,11 @@ export function optimizeQuality(
         mv.apply(trial)
         if (!valid(ctx, trial)) continue
         const score = scoreSolution(ctx, trial)
-        if (score.total < bestScore.total) {
+        const trialObjective = objective(ctx, trial, score)
+        if (trialObjective < bestObjective) {
           best = trial
           bestScore = score
+          bestObjective = trialObjective
           improved = true
           break
         }

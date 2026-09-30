@@ -21,6 +21,7 @@ try {
     seed: req.seed,
     starts: req.starts,
     timeBudgetMs: req.timeBudgetMs,
+    qualityOptimize: true,
     onProgress: (progress) => post({ type: 'progress', progress })
   })
   post({

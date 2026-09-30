@@ -19,6 +19,7 @@ import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { solve } from '../solve'
 import { verifyHardConstraints } from '../core/verify'
+import { measureQuality } from '../core/qualityMetrics'
 import type { SolverInput } from '../model/types'
 
 const root = resolve(__dirname, '../../..')
@@ -37,19 +38,22 @@ beforeAll(async () => {
   // 真实种子脚本：120 班 / 1520 条任务 3900 节 / 373 条规则 / 186 条预排 / 3 约束组
   execFileSync(
     process.execPath,
-    ['-r', join(root, 'scripts/test/node-sqlite-driver.cjs'), join(root, 'scripts/seed-m2-demo.cjs')],
+    [
+      '-r',
+      join(root, 'scripts/test/node-sqlite-driver.cjs'),
+      join(root, 'scripts/seed-m2-demo.cjs')
+    ],
     { env: { ...process.env, ZHIKEPAI_DB: dbPath }, stdio: 'pipe' }
   )
   const { buildSolverInput } = await import('../../main/services/solverInputService')
   const { getDb } = await import('../../main/db/connection')
   // 取"当前学期"（is_current=1），不是 id 最大的那个 —— 种子会同时建下学期的空壳
   const semesterId = (
-    getDb()
-      .prepare('SELECT id FROM semester ORDER BY is_current DESC, id ASC LIMIT 1')
-      .get() as { id: number }
+    getDb().prepare('SELECT id FROM semester ORDER BY is_current DESC, id ASC LIMIT 1').get() as {
+      id: number
+    }
   ).id
   input = buildSolverInput(semesterId)
-
 })
 
 afterAll(() => {
@@ -58,13 +62,14 @@ afterAll(() => {
 
 function report(label: string, input: SolverInput): void {
   const t0 = Date.now()
-  const r = solve(input, { seed: 20260929, starts: 1, timeBudgetMs: 60_000 })
+  const r = solve(input, { seed: 20260929, starts: 1, timeBudgetMs: 60_000, qualityOptimize: true })
   const elapsed = Date.now() - t0
   const violations = verifyHardConstraints(r.ctx, r.solution)
   const byCode = violations.reduce<Record<string, number>>((m, v) => {
     m[v.code] = (m[v.code] ?? 0) + 1
     return m
   }, {})
+  const quality = measureQuality(r.ctx, r.solution)
 
   // eslint-disable-next-line no-console
   console.log(
@@ -75,8 +80,14 @@ function report(label: string, input: SolverInput): void {
       `  AC-3 剔除候选 ${r.stats.prunedByAc3} 个`,
       `  状态 ${r.status} · 未排 ${r.unplaced.length} 节 · 硬约束违反 ${violations.length} ${JSON.stringify(byCode)}`,
       `  事实连堂 ${r.stats.accidentalBlocks} 对（未配置连堂却同学科相邻）`,
+      `  质量 教师日课时≤6: ${quality.maxTeacherDayPeriods} · 空隙课: ${quality.teacherGapCount} · 同科同日重复: ${(quality.sameSubjectDayRepeatRate * 100).toFixed(1)}% · 主课上午: ${(quality.importantMorningRate * 100).toFixed(1)}% · 连堂: ${(quality.consecutiveCompleteness * 100).toFixed(1)}%`,
       `  实测耗时 ${elapsed} ms`,
-      r.diagnostics.length > 0 ? `  诊断 ${r.diagnostics.slice(0, 3).map((d) => d.title).join(' | ')}` : ''
+      r.diagnostics.length > 0
+        ? `  诊断 ${r.diagnostics
+            .slice(0, 3)
+            .map((d) => d.title)
+            .join(' | ')}`
+        : ''
     ].join('\n')
   )
 
