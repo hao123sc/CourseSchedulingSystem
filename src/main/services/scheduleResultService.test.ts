@@ -36,6 +36,7 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
     listVersions: (typeof import('./scheduleResultService'))['listVersions']
     deleteVersion: (typeof import('./scheduleResultService'))['deleteVersion']
     getVersionLessons: (typeof import('./scheduleResultService'))['getVersionLessons']
+    adjustLessonSlot: (typeof import('./scheduleResultService'))['adjustLessonSlot']
     solve: (typeof import('@solver/solve'))['solve']
   }
   const r = {} as Ctx
@@ -59,6 +60,7 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
     r.listVersions = svc.listVersions
     r.deleteVersion = svc.deleteVersion
     r.getVersionLessons = svc.getVersionLessons
+    r.adjustLessonSlot = svc.adjustLessonSlot
     r.solve = (await import('@solver/solve')).solve
 
     const db = r.getDb()
@@ -222,6 +224,42 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
     expect(versions[0].hardViolations).toBe(0)
     expect(versions[0].metrics).toBeTruthy()
     expect((versions[0].metrics as Record<string, unknown>)['accidentalBlocks']).toBe(0)
+  })
+
+  it('M6：合法换课在事务内更新 lesson 并写入调整日志', () => {
+    const version = r.listVersions(ids.semesterId)[0]
+    const lesson = r.getVersionLessons(version.id).find((item) => !item.isLocked)!
+    const beforeLogs = (r.getDb().prepare('SELECT COUNT(*) AS n FROM adjust_log WHERE version_id = ?').get(version.id) as { n: number }).n
+
+    const updated = r.adjustLessonSlot({
+      versionId: version.id,
+      lessonId: lesson.id,
+      toSlotId: ids.slotMon1,
+      reason: '测试持久化'
+    })
+
+    expect(updated.slotId).toBe(ids.slotMon1)
+    expect(r.getVersionLessons(version.id).find((item) => item.id === lesson.id)!.slotId).toBe(ids.slotMon1)
+    const log = r.getDb().prepare(
+      'SELECT action, before_json, after_json, reason FROM adjust_log WHERE version_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(version.id) as { action: string; before_json: string; after_json: string; reason: string }
+    expect(log.action).toBe('move')
+    expect(JSON.parse(log.before_json)).toEqual({ lessonId: lesson.id, slotId: lesson.slotId })
+    expect(JSON.parse(log.after_json)).toEqual({ lessonId: lesson.id, slotId: ids.slotMon1 })
+    expect(log.reason).toBe('测试持久化')
+    expect((r.getDb().prepare('SELECT COUNT(*) AS n FROM adjust_log WHERE version_id = ?').get(version.id) as { n: number }).n).toBe(beforeLogs + 1)
+  })
+
+  it('M6：版本归属、锁定课程和目标时段校验失败时不写调整日志', () => {
+    const version = r.listVersions(ids.semesterId)[0]
+    const locked = r.getVersionLessons(version.id).find((item) => item.isLocked)!
+    const movable = r.getVersionLessons(version.id).find((item) => !item.isLocked)!
+    const count = (r.getDb().prepare('SELECT COUNT(*) AS n FROM adjust_log WHERE version_id = ?').get(version.id) as { n: number }).n
+
+    expect(() => r.adjustLessonSlot({ versionId: version.id, lessonId: locked.id, toSlotId: ids.slotMon1 })).toThrow('预排锁定课程不可移动')
+    expect(() => r.adjustLessonSlot({ versionId: version.id + 999, lessonId: movable.id, toSlotId: ids.slotMon1 })).toThrow('课程不属于当前课表版本')
+    expect(() => r.adjustLessonSlot({ versionId: version.id, lessonId: movable.id, toSlotId: 999999 })).toThrow('目标时段不存在')
+    expect((r.getDb().prepare('SELECT COUNT(*) AS n FROM adjust_log WHERE version_id = ?').get(version.id) as { n: number }).n).toBe(count)
   })
 
   it('外键失败整体回滚：不留半个版本', () => {
