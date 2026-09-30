@@ -102,43 +102,111 @@ export function TimetablePage(): React.JSX.Element {
 
   // ── 学段 / 班级 / 实体候选 ──
   const gradeById = useMemo(() => new Map(meta.grades.map((g) => [g.id, g])), [meta.grades])
-  const classGradeMap = useMemo(() => {
+  const stageOfClass = useMemo(() => {
     const m = new Map<number, number>()
-    for (const c of meta.classes) m.set(c.id, c.gradeId)
+    for (const c of meta.classes) {
+      const sid = gradeById.get(c.gradeId)?.stageId
+      if (sid != null) m.set(c.id, sid)
+    }
     return m
-  }, [meta.classes])
+  }, [meta.classes, gradeById])
+
+  /** 学段选择器候选：只列有班级的学段（都没有时退回全部，避免空列表） */
+  const selectableStages = useMemo(() => {
+    const used = new Set(stageOfClass.values())
+    const withClasses = meta.stages.filter((s) => used.has(s.id))
+    return withClasses.length > 0 ? withClasses : meta.stages
+  }, [meta.stages, stageOfClass])
+
+  const defaultStageId = selectableStages[0]?.id ?? null
+
+  /** 有课的教师 / 在用的教室（默认实体优先挑有数据的，避免一进来是空表） */
+  const busyTeacherIds = useMemo(
+    () => new Set(lessons.map((l) => l.teacherId).filter((t) => t != null)),
+    [lessons]
+  )
+  const busyRoomIds = useMemo(
+    () => new Set(lessons.map((l) => l.classroomId).filter((r) => r != null)),
+    [lessons]
+  )
+
+  /** 默认实体：第一个班级 / 第一个有课的教师 / 第一个在用的教室（数据异步到齐后由派生值兜底） */
+  const defaultTargetId = useMemo(() => {
+    if (view === 'class') return meta.classes[0]?.id ?? null
+    if (view === 'teacher') {
+      return (
+        meta.teachers.find((t) => t.enabled && busyTeacherIds.has(t.id))?.id ??
+        meta.teachers.find((t) => t.enabled)?.id ??
+        null
+      )
+    }
+    if (view === 'room') {
+      return (
+        meta.classrooms.find((r) => r.enabled && busyRoomIds.has(r.id))?.id ??
+        meta.classrooms.find((r) => r.enabled)?.id ??
+        null
+      )
+    }
+    return null
+  }, [view, meta.classes, meta.teachers, meta.classrooms, busyTeacherIds, busyRoomIds])
+
+  const targetValid =
+    targetId != null &&
+    (view === 'class'
+      ? meta.classes.some((c) => c.id === targetId)
+      : view === 'teacher'
+        ? meta.teachers.some((t) => t.id === targetId && t.enabled)
+        : view === 'room'
+          ? meta.classrooms.some((r) => r.id === targetId && r.enabled)
+          : false)
+
+  const resolvedTargetId = targetValid ? targetId : defaultTargetId
+
+  /** 教师 / 教室视图的轴默认跟着其实际课表所在学段走，而不是学段列表第一项 */
+  const stageByUsage = useMemo(() => {
+    if (view !== 'teacher' && view !== 'room') return null
+    if (resolvedTargetId == null || lessons.length === 0) return null
+    const counts = new Map<number, number>()
+    for (const l of lessons) {
+      if (
+        view === 'teacher' ? l.teacherId !== resolvedTargetId : l.classroomId !== resolvedTargetId
+      )
+        continue
+      const sid = stageOfClass.get(l.classId)
+      if (sid != null) counts.set(sid, (counts.get(sid) ?? 0) + 1)
+    }
+    let best: number | null = null
+    let max = 0
+    for (const [sid, n] of counts) {
+      if (n > max) {
+        max = n
+        best = sid
+      }
+    }
+    return best
+  }, [view, resolvedTargetId, lessons, stageOfClass])
 
   const activeStageId = useMemo(() => {
     if (view === 'class') {
-      if (targetId == null) return meta.stages[0]?.id ?? null
-      const gid = classGradeMap.get(targetId)
-      return meta.grades.find((g) => g.id === gid)?.stageId ?? meta.stages[0]?.id ?? null
+      if (resolvedTargetId != null) return stageOfClass.get(resolvedTargetId) ?? defaultStageId
+      return defaultStageId
     }
-    return stageId ?? meta.stages[0]?.id ?? null
-  }, [view, targetId, stageId, classGradeMap, meta.grades, meta.stages])
+    if (view === 'overview') return stageId ?? defaultStageId
+    return stageId ?? stageByUsage ?? defaultStageId
+  }, [view, resolvedTargetId, stageId, stageByUsage, stageOfClass, defaultStageId])
 
   const stageClasses = useMemo(
-    () =>
-      meta.classes.filter(
-        (c) => meta.grades.find((g) => g.id === c.gradeId)?.stageId === activeStageId
-      ),
-    [meta.classes, meta.grades, activeStageId]
+    () => meta.classes.filter((c) => stageOfClass.get(c.id) === activeStageId),
+    [meta.classes, stageOfClass, activeStageId]
   )
 
-  // 视图切换时选默认实体
+  // 视图切换：清掉手选实体 / 手选学段，回到派生默认
   useEffect(() => {
-    const first =
-      view === 'class'
-        ? (stageClasses[0]?.id ?? null)
-        : view === 'teacher'
-          ? (meta.teachers.find((t) => t.enabled)?.id ?? null)
-          : view === 'room'
-            ? (meta.classrooms.find((r) => r.enabled)?.id ?? null)
-            : null
-    setTargetId(first)
+    setTargetId(null)
+    setStageId(null)
     setSelected(null)
     setSearch('')
-  }, [view, activeStageId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view])
 
   const axis = useMemo(
     () => (activeStageId != null ? buildSlotAxis(meta.slotsByStage[activeStageId] ?? []) : null),
@@ -147,21 +215,14 @@ export function TimetablePage(): React.JSX.Element {
 
   const grid = useMemo(
     () =>
-      axis && targetId != null && lessons.length + fixed.length > 0
-        ? buildEntityGrid(
-            view === 'overview' ? 'class' : view,
-            targetId,
-            lessons,
-            fixed,
-            axis,
-            meta
-          )
+      view !== 'overview' && axis && resolvedTargetId != null && lessons.length + fixed.length > 0
+        ? buildEntityGrid(view, resolvedTargetId, lessons, fixed, axis, meta)
         : null,
-    [axis, targetId, view, lessons, fixed, meta]
+    [axis, resolvedTargetId, view, lessons, fixed, meta]
   )
 
   const gaps = useMemo(
-    () => (grid && view === 'teacher' ? teacherGapSlots(grid, axis!) : null),
+    () => (grid && view === 'teacher' && axis ? teacherGapSlots(grid, axis) : null),
     [grid, view, axis]
   )
 
@@ -169,7 +230,8 @@ export function TimetablePage(): React.JSX.Element {
   const sidebar = useMemo(() => {
     const q = search.trim()
     if (view === 'class') {
-      const items = stageClasses.filter((c) => !q || c.name.includes(q))
+      // 班级视图侧栏列全学校班级（按年级分组，跨学段），选谁就以谁的学段作息渲染
+      const items = meta.classes.filter((c) => !q || c.name.includes(q))
       const groups = [...new Set(items.map((c) => c.gradeId))].map((gid) => ({
         key: `g${gid}`,
         label: gradeById.get(gid)?.name ?? '',
@@ -215,7 +277,7 @@ export function TimetablePage(): React.JSX.Element {
         .map(([key, items]) => ({ key, label: key, items }))
     }
     return []
-  }, [view, search, stageClasses, meta.teachers, meta.classrooms, meta.subjects, gradeById])
+  }, [view, search, meta.classes, meta.teachers, meta.classrooms, meta.subjects, gradeById])
 
   if (semesterId == null) {
     return (
@@ -272,11 +334,11 @@ export function TimetablePage(): React.JSX.Element {
           ))}
         </div>
 
-        {view !== 'class' && meta.stages.length > 1 && (
+        {view !== 'class' && selectableStages.length > 1 && (
           <Select
             value={activeStageId ?? undefined}
             onChange={(v) => setStageId(+v)}
-            options={meta.stages.map((s) => ({ value: s.id, label: s.name }))}
+            options={selectableStages.map((s) => ({ value: s.id, label: s.name }))}
           />
         )}
 
@@ -324,7 +386,9 @@ export function TimetablePage(): React.JSX.Element {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {sidebar.length === 0 && (
-                <p className="p-3 text-center text-xs text-[color:var(--text-3)]">无匹配结果</p>
+                <p className="p-3 text-center text-xs text-[color:var(--text-3)]">
+                  {search.trim() ? '无匹配结果' : '本学期还没有数据'}
+                </p>
               )}
               {sidebar.map((g) => (
                 <div key={g.key} className="mb-2">
@@ -337,16 +401,17 @@ export function TimetablePage(): React.JSX.Element {
                       type="button"
                       onClick={() => {
                         setTargetId(it.id)
+                        setStageId(null)
                         setSelected(null)
                       }}
                       className={cn(
                         'relative block w-full rounded-[7px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150',
-                        targetId === it.id
+                        resolvedTargetId === it.id
                           ? 'bg-brand-50 pr-2 font-medium text-brand-700 dark:bg-brand-600/15 dark:text-brand-50'
                           : 'text-[color:var(--text-2)] hover:bg-[color:var(--panel-2)] hover:text-[color:var(--text)]'
                       )}
                     >
-                      {targetId === it.id && (
+                      {resolvedTargetId === it.id && (
                         <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-brand-600" />
                       )}
                       <span className="pl-2">{it.label}</span>
@@ -360,24 +425,30 @@ export function TimetablePage(): React.JSX.Element {
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-card border border-[color:var(--border-subtle)] bg-[color:var(--panel)]">
           {view === 'overview' ? (
-            <div className="flex min-h-0 flex-1 flex-col p-3">
-              <OverviewSheet
-                classes={stageClasses}
-                grades={meta.grades.filter((g) => g.stageId === activeStageId)}
-                lessons={lessons}
-                fixed={fixed}
-                slots={meta.slotsByStage[activeStageId ?? -1] ?? []}
-                subjects={meta.subjects}
-                teachers={meta.teachers}
-                classrooms={meta.classrooms}
-                hardViolations={version?.hardViolations ?? 0}
-              />
-            </div>
+            stageClasses.length > 0 ? (
+              <div className="flex min-h-0 flex-1 flex-col p-3">
+                <OverviewSheet
+                  classes={stageClasses}
+                  grades={meta.grades.filter((g) => g.stageId === activeStageId)}
+                  lessons={lessons}
+                  fixed={fixed}
+                  slots={meta.slotsByStage[activeStageId ?? -1] ?? []}
+                  subjects={meta.subjects}
+                  teachers={meta.teachers}
+                  classrooms={meta.classrooms}
+                  hardViolations={version?.hardViolations ?? 0}
+                />
+              </div>
+            ) : (
+              <div className="grid flex-1 place-items-center text-sm text-[color:var(--text-3)]">
+                该学段暂无班级
+              </div>
+            )
           ) : (
             <>
               <GridHeader
                 view={view}
-                targetId={targetId}
+                targetId={resolvedTargetId}
                 grid={grid}
                 gaps={gaps}
                 loading={loadingData}
@@ -395,7 +466,7 @@ export function TimetablePage(): React.JSX.Element {
                   />
                 ) : (
                   <div className="grid h-full place-items-center text-sm text-[color:var(--text-3)]">
-                    {loadingData ? '正在载入课表…' : '请选择左侧实体'}
+                    {loadingData ? '正在载入课表…' : '本学期还没有班级 / 教室数据'}
                   </div>
                 )}
               </div>
@@ -410,7 +481,7 @@ export function TimetablePage(): React.JSX.Element {
               lessons={lessons}
               grid={grid}
               axis={axis}
-              targetId={targetId}
+              targetId={resolvedTargetId}
               gaps={gaps}
             />
           </aside>
