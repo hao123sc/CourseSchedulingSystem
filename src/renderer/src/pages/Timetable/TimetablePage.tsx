@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@renderer/lib/utils'
 import { api } from '@renderer/lib/api'
 import { toast } from '@renderer/stores/toastStore'
 import { useSchoolStore } from '@renderer/stores/schoolStore'
 import { useMetaStore } from '@renderer/stores/metaStore'
 import type { FixedLesson, Lesson, ScheduleVersion } from '@shared/types/entities'
+import { AdjustmentHistory, createAdjustmentCommand, detectAdjustmentConflicts, type AdjustmentLesson } from '@shared/adjustments'
 import { Button } from '@renderer/components/ui/button'
 import {
   buildEntityGrid,
@@ -45,6 +46,9 @@ export function TimetablePage(): React.JSX.Element {
   const [targetId, setTargetId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<GridLesson | null>(null)
+  const [draggingLesson, setDraggingLesson] = useState<GridLesson | null>(null)
+  const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null)
+  const history = useRef(new AdjustmentHistory(50))
 
   useEffect(() => {
     if (!loaded) void load()
@@ -279,6 +283,52 @@ export function TimetablePage(): React.JSX.Element {
     return []
   }, [view, search, meta.classes, meta.teachers, meta.classrooms, meta.subjects, gradeById])
 
+  const adjustmentLessons = (): AdjustmentLesson[] => lessons.map((lesson) => ({
+    id: lesson.id,
+    classId: lesson.classId,
+    teacherId: lesson.teacherId,
+    classroomId: lesson.classroomId,
+    slotId: lesson.slotId,
+    isLocked: lesson.isLocked,
+    consecutiveGroup: lesson.consecutiveGroup
+  }))
+
+  const handleDrop = (slotId: number): void => {
+    if (!draggingLesson?.lessonId || draggingLesson.slotId === slotId) return
+    const proposal = { lessonId: draggingLesson.lessonId, fromSlotId: draggingLesson.slotId, toSlotId: slotId }
+    const conflicts = detectAdjustmentConflicts(adjustmentLessons(), proposal)
+    if (conflicts.length > 0) {
+      setAdjustmentNotice(conflicts.map((conflict) => conflict.message).join('；'))
+      return
+    }
+    const command = createAdjustmentCommand(proposal)
+    const next = adjustmentLessons()
+    history.current.execute(command, next)
+    setLessons((previous) => previous.map((lesson) => lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson))
+    setAdjustmentNotice('已移动课程（当前为本地预览，保存接口将在后续 M6 单元接入）')
+    setDraggingLesson(null)
+  }
+
+  const handleUndo = (): void => {
+    const next = adjustmentLessons()
+    if (!history.current.undo(next)) return
+    setLessons(next.map((item) => {
+      const original = lessons.find((lesson) => lesson.id === item.id)
+      return original ? { ...original, slotId: item.slotId } : original
+    }).filter((item): item is Lesson => item != null))
+    setAdjustmentNotice('已撤销上一步调整')
+  }
+
+  const handleRedo = (): void => {
+    const next = adjustmentLessons()
+    if (!history.current.redo(next)) return
+    setLessons(next.map((item) => {
+      const original = lessons.find((lesson) => lesson.id === item.id)
+      return original ? { ...original, slotId: item.slotId } : original
+    }).filter((item): item is Lesson => item != null))
+    setAdjustmentNotice('已重做调整')
+  }
+
   if (semesterId == null) {
     return (
       <div className="mx-auto max-w-xl rounded-card border border-dashed border-[color:var(--border-subtle)] p-10 text-center text-sm text-[color:var(--text-secondary)]">
@@ -355,16 +405,22 @@ export function TimetablePage(): React.JSX.Element {
         >
           硬约束 {version?.hardViolations ?? '—'}
         </span>
-        <Button size="sm" disabled title="撤销 / 重做在 M6 交互调整开放">
+        <Button size="sm" disabled={!history.current.canUndo} onClick={handleUndo} title="撤销最近一次本地调整">
           ↶ 撤销
         </Button>
-        <Button size="sm" disabled title="撤销 / 重做在 M6 交互调整开放">
+        <Button size="sm" disabled={!history.current.canRedo} onClick={handleRedo} title="重做最近一次本地调整">
           ↷ 重做
         </Button>
         <Button size="sm" disabled title="导出在 M7 开放">
           ↥ 导出
         </Button>
       </div>
+
+      {adjustmentNotice && (
+        <div className="rounded-btn border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-100">
+          {adjustmentNotice}
+        </div>
+      )}
 
       {/* 主体三栏 */}
       <div className="flex min-h-0 flex-1 gap-3">
@@ -463,6 +519,11 @@ export function TimetablePage(): React.JSX.Element {
                     gapSlots={gaps?.gaps ?? new Set<number>()}
                     selected={selected}
                     onSelect={setSelected}
+                    draggingLesson={draggingLesson}
+                    onDragStart={(lesson) => {
+                      if (lesson.lessonId != null) setDraggingLesson(lesson)
+                    }}
+                    onDrop={handleDrop}
                     waterfall
                   />
                 ) : (

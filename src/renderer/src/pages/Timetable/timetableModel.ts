@@ -31,6 +31,7 @@ export interface SlotAxis {
 /** 一格课表块（lesson 行或预排叠加） */
 export interface GridLesson {
   key: string
+  lessonId: number | null
   slotId: number
   subjectId: number | null
   subjectName: string
@@ -179,6 +180,7 @@ export function buildEntityGrid(
       ...(lessonsBySlot.get(l.slotId) ?? []),
       {
         key: `l${l.id}`,
+        lessonId: l.id,
         slotId: l.slotId,
         subjectId: l.subjectId,
         subjectName: subject?.name ?? '课程',
@@ -258,6 +260,7 @@ export function buildEntityGrid(
       ...(lessonsBySlot.get(f.slotId) ?? []),
       {
         key: `f${f.id}`,
+        lessonId: null,
         slotId: f.slotId,
         subjectId: f.subjectId ?? null,
         subjectName: subject?.name ?? f.label ?? '预排占位',

@@ -20,7 +20,10 @@ export function TimetableGrid({
   gapSlots,
   selected,
   onSelect,
-  waterfall
+  waterfall,
+  draggingLesson,
+  onDragStart,
+  onDrop
 }: {
   axis: SlotAxis
   grid: ClassGrid
@@ -29,6 +32,9 @@ export function TimetableGrid({
   selected: GridLesson | null
   onSelect: (l: GridLesson) => void
   waterfall: boolean
+  draggingLesson?: GridLesson | null
+  onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
+  onDrop?: (slotId: number) => void
 }): React.JSX.Element {
   const today = todayHighlight(axis.days)
   const periodRows = buildPeriodRows(axis)
@@ -82,7 +88,17 @@ export function TimetableGrid({
                   const isGap = view === 'teacher' && gapSlots.has(sid)
                   const wf = waterfall && items.length > 0 ? seq++ : -1
                   return (
-                    <td key={d} className="tt-cell">
+                    <td
+                      key={d}
+                      className={cn('tt-cell', draggingLesson && !isCovered && 'ring-1 ring-inset ring-brand-300/50')}
+                      onDragOver={(event) => {
+                        if (draggingLesson && !isCovered) event.preventDefault()
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        if (draggingLesson && !isCovered && sid != null) onDrop?.(sid)
+                      }}
+                    >
                       {isCovered ? null : items.length > 0 ? (
                         items.map((l, i) => (
                           <LessonCard
@@ -92,6 +108,7 @@ export function TimetableGrid({
                             waterfallIndex={wf}
                             stack={items.length > 1 ? { index: i, count: items.length } : undefined}
                             onSelect={onSelect}
+                            onDragStart={onDragStart}
                           />
                         ))
                       ) : isGap ? (

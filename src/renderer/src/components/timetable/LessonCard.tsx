@@ -17,7 +17,8 @@ export function LessonCard({
   selected,
   waterfallIndex,
   stack,
-  onSelect
+  onSelect,
+  onDragStart
 }: {
   lesson: GridLesson
   selected: boolean
@@ -26,6 +27,7 @@ export function LessonCard({
   /** 同格多课时的堆叠位置；count=1 或缺省为整格单卡 */
   stack?: { index: number; count: number }
   onSelect?: (l: GridLesson) => void
+  onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
 }): React.JSX.Element {
   const span = lesson.blockSize > 1 && stack == null
   const compact = stack != null && stack.count > 1
@@ -41,7 +43,8 @@ export function LessonCard({
         compact && 'tt-compact',
         lesson.overlay && !lesson.color && 'tt-dim',
         selected && 'tt-sel',
-        waterfallIndex >= 0 && 'tt-fall'
+        waterfallIndex >= 0 && 'tt-fall',
+        !lesson.locked && !lesson.overlay && onDragStart && 'cursor-grab active:cursor-grabbing'
       )}
       style={{
         ...subjectVars(lesson.color),
@@ -57,6 +60,8 @@ export function LessonCard({
         ...(waterfallIndex >= 0 ? { animationDelay: `${Math.min(waterfallIndex, 40) * 24}ms` } : {})
       }}
       title={lesson.title + (lesson.meta ? ` · ${lesson.meta}` : '')}
+      draggable={Boolean(onDragStart && !lesson.locked && !lesson.overlay)}
+      onDragStart={(event) => onDragStart?.(lesson, event)}
       onClick={() => onSelect?.(lesson)}
     >
       {span && lesson.blockIndex === 0 && <span className="tt-tag">连堂</span>}
