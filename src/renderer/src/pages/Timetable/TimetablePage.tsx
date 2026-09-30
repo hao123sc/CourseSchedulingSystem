@@ -230,6 +230,33 @@ export function TimetablePage(): React.JSX.Element {
     [grid, view, axis]
   )
 
+  /** 拖拽开始后预计算当前网格所有时段，绿色表示通过同一套冲突检测的可落点。 */
+  const dropSlots = useMemo(() => {
+    if (draggingLesson?.lessonId == null || axis == null) return null
+    const source = lessons.find((lesson) => lesson.id === draggingLesson.lessonId)
+    if (source == null || source.isLocked) return new Set<number>()
+    const adjustmentLessons: AdjustmentLesson[] = lessons.map((lesson) => ({
+      id: lesson.id,
+      classId: lesson.classId,
+      teacherId: lesson.teacherId,
+      classroomId: lesson.classroomId,
+      slotId: lesson.slotId,
+      isLocked: lesson.isLocked,
+      consecutiveGroup: lesson.consecutiveGroup
+    }))
+    const valid = new Set<number>()
+    for (const row of axis.rows) {
+      if (row.slotId === source.slotId) continue
+      const conflicts = detectAdjustmentConflicts(adjustmentLessons, {
+        lessonId: source.id,
+        fromSlotId: source.slotId,
+        toSlotId: row.slotId
+      })
+      if (conflicts.length === 0) valid.add(row.slotId)
+    }
+    return valid
+  }, [axis, draggingLesson, lessons])
+
   // ── 侧栏列表 ──
   const sidebar = useMemo(() => {
     const q = search.trim()
@@ -533,9 +560,11 @@ export function TimetablePage(): React.JSX.Element {
                     selected={selected}
                     onSelect={setSelected}
                     draggingLesson={draggingLesson}
+                    dropSlots={dropSlots}
                     onDragStart={(lesson) => {
                       if (lesson.lessonId != null) setDraggingLesson(lesson)
                     }}
+                    onDragEnd={() => setDraggingLesson(null)}
                     onDrop={handleDrop}
                     waterfall
                   />

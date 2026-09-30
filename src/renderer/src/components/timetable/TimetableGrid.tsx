@@ -22,7 +22,9 @@ export function TimetableGrid({
   onSelect,
   waterfall,
   draggingLesson,
+  dropSlots,
   onDragStart,
+  onDragEnd,
   onDrop
 }: {
   axis: SlotAxis
@@ -33,7 +35,10 @@ export function TimetableGrid({
   onSelect: (l: GridLesson) => void
   waterfall: boolean
   draggingLesson?: GridLesson | null
+  /** 拖拽中的可落点；未包含的格子会以不可用状态显示 */
+  dropSlots?: Set<number> | null
   onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
+  onDragEnd?: () => void
   onDrop?: (slotId: number) => void
 }): React.JSX.Element {
   const today = todayHighlight(axis.days)
@@ -87,16 +92,23 @@ export function TimetableGrid({
                   const isCovered = grid.covered.has(sid)
                   const isGap = view === 'teacher' && gapSlots.has(sid)
                   const wf = waterfall && items.length > 0 ? seq++ : -1
+                  const isDropTarget = draggingLesson != null && dropSlots != null
+                  const canDrop = isDropTarget && dropSlots.has(sid)
                   return (
                     <td
                       key={d}
-                      className={cn('tt-cell', draggingLesson && !isCovered && 'ring-1 ring-inset ring-brand-300/50')}
+                      className={cn(
+                        'tt-cell transition-colors duration-150',
+                        isDropTarget && !isCovered && canDrop && 'bg-emerald-100/70 ring-2 ring-inset ring-emerald-400 dark:bg-emerald-400/15 dark:ring-emerald-300',
+                        isDropTarget && !isCovered && !canDrop && 'bg-slate-100/60 ring-1 ring-inset ring-slate-300/70 dark:bg-slate-800/50 dark:ring-slate-600/70'
+                      )}
+                      title={isDropTarget && !isCovered ? (canDrop ? '可以放置' : '存在班级、教师或教室冲突') : undefined}
                       onDragOver={(event) => {
-                        if (draggingLesson && !isCovered) event.preventDefault()
+                        if (draggingLesson && !isCovered && canDrop) event.preventDefault()
                       }}
                       onDrop={(event) => {
                         event.preventDefault()
-                        if (draggingLesson && !isCovered && sid != null) onDrop?.(sid)
+                        if (draggingLesson && !isCovered && canDrop && sid != null) onDrop?.(sid)
                       }}
                     >
                       {isCovered ? null : items.length > 0 ? (
@@ -109,6 +121,7 @@ export function TimetableGrid({
                             stack={items.length > 1 ? { index: i, count: items.length } : undefined}
                             onSelect={onSelect}
                             onDragStart={onDragStart}
+                            onDragEnd={onDragEnd}
                           />
                         ))
                       ) : isGap ? (

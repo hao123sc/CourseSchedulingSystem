@@ -18,7 +18,8 @@ export function LessonCard({
   waterfallIndex,
   stack,
   onSelect,
-  onDragStart
+  onDragStart,
+  onDragEnd
 }: {
   lesson: GridLesson
   selected: boolean
@@ -28,6 +29,7 @@ export function LessonCard({
   stack?: { index: number; count: number }
   onSelect?: (l: GridLesson) => void
   onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
+  onDragEnd?: () => void
 }): React.JSX.Element {
   const span = lesson.blockSize > 1 && stack == null
   const compact = stack != null && stack.count > 1
@@ -62,6 +64,7 @@ export function LessonCard({
       title={lesson.title + (lesson.meta ? ` · ${lesson.meta}` : '')}
       draggable={Boolean(onDragStart && !lesson.locked && !lesson.overlay)}
       onDragStart={(event) => onDragStart?.(lesson, event)}
+      onDragEnd={onDragEnd}
       onClick={() => onSelect?.(lesson)}
     >
       {span && lesson.blockIndex === 0 && <span className="tt-tag">连堂</span>}
