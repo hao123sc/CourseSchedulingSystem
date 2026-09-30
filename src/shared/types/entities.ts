@@ -409,3 +409,39 @@ export interface ExcelImportResult {
   skipped: number
   errors: string[]
 }
+
+// ---- 课表版本与课表项（M3，docs/03 §3.7） ----
+export interface ScheduleVersion {
+  id: number
+  semesterId: number
+  parentId: number | null
+  name: string
+  /** 使用的风格档位 code（teacher_first / balanced / student_first） */
+  weightProfile: string | null
+  hardViolations: number
+  softScore: number
+  /** 各维度指标快照（JSON 解析后的对象，解析失败为 null） */
+  metrics: Record<string, unknown> | null
+  solveMs: number | null
+  isPublished: boolean
+  createdAt: string
+  /** 该版本包含的课表行数（含预排锁定行） */
+  lessonCount: number
+}
+
+export interface Lesson {
+  id: number
+  versionId: number
+  taskId: number
+  classId: number
+  subjectId: number
+  teacherId: number | null
+  classroomId: number | null
+  slotId: number
+  weekMode: WeekMode
+  /** 预排锁定钉死的课为 true */
+  isLocked: boolean
+  /** 同一连堂块共享一个 uuid，非连堂为 null */
+  consecutiveGroup: string | null
+  remark: string | null
+}

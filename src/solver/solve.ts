@@ -84,6 +84,7 @@ export function toPlacedLessons(ctx: SolverContext, sol: Solution): PlacedLesson
         const classId = u.classIds[ci]
         const teacherId = u.teacherIds[Math.min(k, u.teacherIds.length - 1)] ?? null
         out.push({
+          unitId,
           taskId,
           classId,
           subjectId: u.subjectId,

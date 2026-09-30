@@ -83,6 +83,8 @@ export interface Assignment {
 
 /** 落库时展开成一节一节的课（M3 后半段的 lesson 表结构对齐用） */
 export interface PlacedLesson {
+  /** 来源课时单元，同一连堂块的课共享同一个 unitId（落库时据此生成 consecutive_group） */
+  unitId: number
   taskId: number
   classId: number
   subjectId: number

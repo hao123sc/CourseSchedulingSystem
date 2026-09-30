@@ -114,7 +114,12 @@ const zhikepaiApi: {
   'solver:buildInput': (semesterId, code) =>
     ipcRenderer.invoke('solver:buildInput', semesterId, code),
   'solver:checkInput': (semesterId, code) =>
-    ipcRenderer.invoke('solver:checkInput', semesterId, code)
+    ipcRenderer.invoke('solver:checkInput', semesterId, code),
+
+  // ---- 课表版本（M3 后半段） ----
+  'schedule:listVersions': (semesterId) =>
+    ipcRenderer.invoke('schedule:listVersions', semesterId),
+  'schedule:deleteVersion': (id) => ipcRenderer.invoke('schedule:deleteVersion', id)
 }
 
 if (process.contextIsolated) {

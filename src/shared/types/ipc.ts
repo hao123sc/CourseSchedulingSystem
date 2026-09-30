@@ -33,6 +33,7 @@ import type {
   SchoolInput,
   Semester,
   SemesterInput,
+  ScheduleVersion,
   Stage,
   StageInput,
   Subject,
@@ -201,9 +202,9 @@ export interface IpcApi {
   'solver:buildInput': (semesterId: number, weightProfileCode?: string) => SolverInput
   'solver:checkInput': (semesterId: number, weightProfileCode?: string) => SolverInputReport
 
-  // ---- 排课（M3/M5 占位） ----
-  // 'schedule:start': (p: unknown) => { taskId: string }
-  // 'schedule:cancel': (taskId: string) => void
+  // ---- 课表版本（M3 后半段；start/cancel 随 Worker 封装接上） ----
+  'schedule:listVersions': (semesterId: number) => ScheduleVersion[]
+  'schedule:deleteVersion': (id: number) => void
 
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8 占位） ----
   // 'timetable:byClass': (classId: number) => unknown
