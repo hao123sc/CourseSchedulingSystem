@@ -19,9 +19,10 @@ import { minConflictsRepair } from './core/minConflicts'
 import { verifyHardConstraints } from './core/verify'
 import { createRng } from './core/random'
 import { countAccidentalBlocks } from './core/adjacency'
+import { optimizeQuality } from './core/optimizer'
 import type { Diagnosis } from './core/diagnosis'
 
-export type SolvePhase = 'preprocess' | 'construct' | 'repair' | 'verify' | 'done'
+export type SolvePhase = 'preprocess' | 'construct' | 'repair' | 'optimize' | 'verify' | 'done'
 
 export interface SolveProgress {
   phase: SolvePhase
@@ -44,6 +45,8 @@ export interface SolveOptions {
   now?: () => number
   /** 走班学生群体（H11），当前 SolverInput 尚未携带，留给 M9 */
   studentGroups?: Map<number, number[]>
+  /** M5 质量优化开关；默认开启，预算上限由引擎统一控制。 */
+  qualityOptimize?: boolean
 }
 
 export type SolveStatus = 'solved' | 'partial' | 'infeasible' | 'cancelled'
@@ -150,7 +153,11 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
 
   // 值域被裁空 = 铁定无解，不必再跑构造，直接给诊断
   if (pruned.wipeouts.length > 0) {
-    return fail('infeasible', { assignments: new Map(), unplaced: pruned.wipeouts, seed: baseSeed }, pruned.wipeouts)
+    return fail(
+      'infeasible',
+      { assignments: new Map(), unplaced: pruned.wipeouts, seed: baseSeed },
+      pruned.wipeouts
+    )
   }
 
   // ── 阶段 1：构造（多起点取优）────────────────────────────────────
@@ -200,10 +207,55 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
   }
 
   if (!best) {
-    return fail('cancelled', { assignments: new Map(), unplaced: ctx.units.map((u) => u.id), seed: baseSeed }, ctx.units.map((u) => u.id))
+    return fail(
+      'cancelled',
+      { assignments: new Map(), unplaced: ctx.units.map((u) => u.id), seed: baseSeed },
+      ctx.units.map((u) => u.id)
+    )
   }
 
-  emit({ phase: 'verify', ratio: 0.9, message: '校验硬约束…', start: starts, totalStarts: starts })
+  // ── 阶段 2~4：ALNS / LAHC / Polish 质量优化 ───────────────────────
+  // 给优化器保留总预算的一小段固定上限，避免 M3 的零冲突基线被质量优化拖慢；
+  // 后续可由 Worker 按规模动态分配更大的预算。
+  const remaining = Math.max(0, budget - (now() - started) - 10)
+  if (
+    options.qualityOptimize !== false &&
+    best.unplaced.length === 0 &&
+    best.violations.length === 0 &&
+    remaining > 0
+  ) {
+    emit({
+      phase: 'optimize',
+      ratio: 0.92,
+      message: '正在优化课表质量…',
+      start: starts,
+      totalStarts: starts
+    })
+    const optimized = optimizeQuality(ctx, best.sol, {
+      seed: best.sol.seed,
+      timeBudgetMs: Math.min(500, remaining),
+      now,
+      cancelled: options.cancelled,
+      onProgress: (phase, score) =>
+        emit({
+          phase: 'optimize',
+          ratio: 0.92,
+          message: `${phase} 精修中（评分 ${score.toFixed(1)}）`,
+          start: starts,
+          totalStarts: starts
+        })
+    })
+    best = {
+      sol: optimized.solution,
+      unplaced: optimized.solution.unplaced,
+      violations: verifyHardConstraints(ctx, optimized.solution, {
+        studentGroups: options.studentGroups
+      }),
+      accidental: countAccidentalBlocks(ctx, optimized.solution)
+    }
+  }
+
+  emit({ phase: 'verify', ratio: 0.96, message: '校验硬约束…', start: starts, totalStarts: starts })
 
   const status: SolveStatus = options.cancelled?.()
     ? 'cancelled'

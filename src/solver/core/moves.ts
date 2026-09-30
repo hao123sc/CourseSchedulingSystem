@@ -80,8 +80,10 @@ export function swap(solution: Solution, firstUnitId: number, secondUnitId: numb
   const first = solution.assignments.get(firstUnitId)
   const second = solution.assignments.get(secondUnitId)
   if (!first || !second) throw new Error('cannot swap an unassigned unit')
-  const a = { ...second, slotIds: [...second.slotIds], roomIds: [...second.roomIds] }
-  const b = { ...first, slotIds: [...first.slotIds], roomIds: [...first.roomIds] }
+  // 交换的是时间位置，不交换每个单元绑定的场地；否则普通班固定教室会被
+  // 质量优化偷偷换走，且拼合组的逐班场地映射也会失真。
+  const a = { ...first, slotId: second.slotId, slotIds: [...second.slotIds] }
+  const b = { ...second, slotId: first.slotId, slotIds: [...first.slotIds] }
   return replaceAssignments(
     'swap',
     [firstUnitId, secondUnitId],

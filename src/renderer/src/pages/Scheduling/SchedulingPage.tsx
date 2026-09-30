@@ -28,6 +28,7 @@ type RunPhase = 'idle' | 'running' | 'done'
 const STEPS = [
   { key: 'preprocess', label: '输入与规则检查' },
   { key: 'construct', label: '生成初始课表' },
+  { key: 'optimize', label: '优化课表质量' },
   { key: 'verify', label: '校验硬约束' }
 ] as const
 
@@ -35,6 +36,7 @@ const PHASE_TEXT: Record<string, string> = {
   preprocess: '正在检查排课规则…',
   construct: '正在生成初始课表…',
   repair: '正在安放剩余课程…',
+  optimize: '正在优化课表质量…',
   verify: '正在校验硬约束…',
   done: '完成'
 }
