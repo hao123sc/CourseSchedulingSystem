@@ -450,6 +450,7 @@ export function TimetablePage(): React.JSX.Element {
                 view={view}
                 targetId={resolvedTargetId}
                 grid={grid}
+                axis={axis}
                 gaps={gaps}
                 loading={loadingData}
               />
@@ -555,19 +556,24 @@ function GridHeader({
   view,
   targetId,
   grid,
+  axis,
   gaps,
   loading
 }: {
   view: TTView
   targetId: number | null
   grid: ReturnType<typeof buildEntityGrid> | null
+  axis: ReturnType<typeof buildSlotAxis> | null
   gaps: ReturnType<typeof teacherGapSlots> | null
   loading: boolean
 }): React.JSX.Element {
   const meta = useMetaStore()
+  const onAxisSlot = new Set((axis?.rows ?? []).map((r) => r.slotId))
   if (targetId == null)
     return <div className="p-4 pb-0 text-sm text-[color:var(--text-3)]">未选择实体</div>
-  const count = grid ? [...grid.lessonsBySlot.values()].reduce((n, a) => n + a.length, 0) : 0
+  const count = grid
+    ? [...grid.lessonsBySlot.values()].flat().filter((b) => onAxisSlot.has(b.slotId)).length
+    : 0
   const sub = loading ? '载入中…' : `本周 ${count} 节`
   let title = ''
   let detail = ''
@@ -619,7 +625,9 @@ function StatsPanel({
 }): React.JSX.Element {
   const stats = useMemo(() => {
     if (!grid || targetId == null || !axis) return []
-    const blocks = [...grid.lessonsBySlot.values()].flat()
+    // 只统计当前学段作息上的块（教师/教室可能跨学段任教使用）
+    const onAxisSlot = new Set(axis.rows.map((r) => r.slotId))
+    const blocks = [...grid.lessonsBySlot.values()].flat().filter((b) => onAxisSlot.has(b.slotId))
     const lessonBlocks = blocks.filter((b) => !b.overlay)
     const overlayBlocks = blocks.filter((b) => b.overlay)
     const groups = new Set(
@@ -660,7 +668,9 @@ function StatsPanel({
         { k: '空隙', v: `${gaps ? [...gaps.gaps].length : 0} 节` }
       ]
     }
-    const roomLessons = lessons.filter((l) => l.classroomId === targetId)
+    const roomLessons = lessons.filter(
+      (l) => l.classroomId === targetId && onAxisSlot.has(l.slotId)
+    )
     const classCount = new Set(roomLessons.map((l) => l.classId)).size
     const subjectCount = new Set(roomLessons.map((l) => l.subjectId)).size
     return [

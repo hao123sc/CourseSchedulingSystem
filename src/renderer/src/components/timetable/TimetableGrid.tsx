@@ -37,7 +37,12 @@ export function TimetableGrid({
 
   return (
     <div className="overflow-x-auto pb-1">
-      <table className="w-full border-separate min-w-[760px]" style={{ borderSpacing: '5px' }}>
+      {/* table-fixed：课程块是绝对定位（连堂跨行需要），不参与 auto 列宽计算，
+          auto 布局会把宽度全分给时间列、星期列压成细条——列宽必须由表头定死 */}
+      <table
+        className="w-full table-fixed border-separate min-w-[760px]"
+        style={{ borderSpacing: '5px' }}
+      >
         <thead>
           <tr>
             <th className="w-[58px] min-w-[58px]" />
@@ -85,12 +90,15 @@ export function TimetableGrid({
                       return (
                         <td key={dd} className="tt-cell">
                           {isCovered ? null : items.length > 0 ? (
-                            items.map((l) => (
+                            items.map((l, i) => (
                               <LessonCard
                                 key={l.key}
                                 lesson={l}
                                 selected={selected?.key === l.key}
                                 waterfallIndex={wf}
+                                stack={
+                                  items.length > 1 ? { index: i, count: items.length } : undefined
+                                }
                                 onSelect={onSelect}
                               />
                             ))

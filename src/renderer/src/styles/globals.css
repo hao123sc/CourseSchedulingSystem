@@ -51,6 +51,8 @@ body {
 .tt-cell {
   position: relative;
   height: 56px;
+  /* 课程块为绝对定位，格子不能带内边距，否则包含块错位 */
+  padding: 0;
 }
 .tt-lesson {
   position: absolute;
@@ -119,6 +121,23 @@ body {
 /* 连堂跨行：56×N + 5×(N−1)，与视觉稿 .lesson.span2 同口径 */
 .tt-lesson.tt-span {
   z-index: 2;
+}
+/* 同格多课（多并发场地的教室视图）：紧凑堆叠行 */
+.tt-lesson.tt-compact {
+  padding: 1px 6px;
+  gap: 0;
+}
+.tt-lesson.tt-compact .tt-name {
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tt-lesson.tt-compact:hover {
+  transform: none;
+  box-shadow: 0 0 0 1px var(--s-bd);
+  z-index: 6;
 }
 .tt-tag {
   position: absolute;

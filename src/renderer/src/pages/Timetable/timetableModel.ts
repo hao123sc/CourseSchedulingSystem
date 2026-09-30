@@ -140,14 +140,18 @@ export function buildEntityGrid(
         : l.classroomId === targetId
   )
 
-  // 连堂组：slotId → 组信息（组内第几节 / 共几节）
+  // 连堂组：slotId → 组信息（组内第几节 / 共几节）。
+  // 教室视图不做跨行：多并发场地（田径场等）同格有多节课，跨行覆盖会把并发课藏掉
+  const useSpan = view !== 'room'
   const groupInfo = new Map<number, { group: string; index: number; size: number }>()
   const groups = new Map<string, { slotIds: number[] }>()
-  for (const l of mine) {
-    if (l.consecutiveGroup) {
-      const g = groups.get(l.consecutiveGroup) ?? { slotIds: [] }
-      g.slotIds.push(l.slotId)
-      groups.set(l.consecutiveGroup, g)
+  if (useSpan) {
+    for (const l of mine) {
+      if (l.consecutiveGroup) {
+        const g = groups.get(l.consecutiveGroup) ?? { slotIds: [] }
+        g.slotIds.push(l.slotId)
+        groups.set(l.consecutiveGroup, g)
+      }
     }
   }
   for (const [group, { slotIds }] of groups) {
@@ -193,8 +197,10 @@ export function buildEntityGrid(
   }
 
   // 连堂块覆盖：非首节的 slot 不再渲染（由首节块跨行盖住）
-  for (const [, { slotIds }] of groups) {
-    for (const sid of slotIds.slice(1)) covered.add(sid)
+  if (useSpan) {
+    for (const [, { slotIds }] of groups) {
+      for (const sid of slotIds.slice(1)) covered.add(sid)
+    }
   }
 
   // ── 2. 预排叠加（不产生 lesson 行的那部分）──
