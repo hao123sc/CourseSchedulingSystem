@@ -136,21 +136,21 @@ export function construct(
     }
 
     // LCV：对未来伤害最小的窗口
-    let best: { wid: number; roomId: number | null; score: number } | null = null
+    let best: { wid: number; roomIds: (number | null)[]; score: number } | null = null
     for (const wid of domains[u.id]) {
       const probe = board.canPlace(u, wid)
       if (!probe.ok) continue
       let score = 0
       for (const si of ctx.windows[wid]) score += slotDemand[si]
       score = score * 0.6 + rng.next() // 同分随机打散 → 多起点能产生不同解
-      if (best == null || score < best.score) best = { wid, roomId: probe.roomId, score }
+      if (best == null || score < best.score) best = { wid, roomIds: probe.roomIds, score }
     }
     if (!best) {
       unplaced.push(u.id)
       dropDemand(u.id)
       continue
     }
-    board.place(u, best.wid, best.roomId)
+    board.place(u, best.wid, best.roomIds)
     dropDemand(u.id)
   }
 

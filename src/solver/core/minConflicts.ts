@@ -55,7 +55,7 @@ export function minConflictsRepair(
     for (const wid of rng.shuffle(domains[unitId])) {
       const probe = board.canPlace(u, wid)
       if (probe.ok) {
-        board.place(u, wid, probe.roomId)
+        board.place(u, wid, probe.roomIds)
         placed = true
         break
       }
@@ -91,7 +91,7 @@ export function minConflictsRepair(
     }
     const probe = board.canPlace(u, best.wid)
     if (probe.ok) {
-      board.place(u, best.wid, probe.roomId)
+      board.place(u, best.wid, probe.roomIds)
     } else {
       // 顶掉之后仍放不下（多半是场地容量），退回去等下一轮
       queue.push(unitId)

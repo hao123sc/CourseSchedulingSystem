@@ -77,14 +77,15 @@ export function toPlacedLessons(ctx: SolverContext, sol: Solution): PlacedLesson
     if (!u) continue
     a.slotIds.forEach((slotId, i) => {
       u.taskIds.forEach((taskId, k) => {
-        const classId = u.classIds[Math.min(k, u.classIds.length - 1)]
+        const ci = Math.min(k, u.classIds.length - 1)
+        const classId = u.classIds[ci]
         const teacherId = u.teacherIds[Math.min(k, u.teacherIds.length - 1)] ?? null
         out.push({
           taskId,
           classId,
           subjectId: u.subjectId,
           teacherId,
-          classroomId: a.roomId,
+          classroomId: a.roomIds[ci] ?? null,
           slotId,
           weekMode: u.weekMode,
           blockIndex: i,

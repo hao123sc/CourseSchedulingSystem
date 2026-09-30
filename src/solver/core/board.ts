@@ -18,9 +18,8 @@ import type { Assignment, Solution, Unit } from '../model/solution'
 
 export interface PlacementProbe {
   ok: boolean
-  roomId: number | null
-  /** 该场地/班级/教师上要占的班位数（无场地时为 0） */
-  roomSlotsTaken: number
+  /** 各班落位的场地，与 Unit.classIds 一一对应 */
+  roomIds: (number | null)[]
 }
 
 export class Board {
@@ -46,11 +45,10 @@ export class Board {
     this.unitsBySlot = ctx.slots.map(() => new Set<number>())
   }
 
-  /** 该单元在该场地需要占的班位数 */
+  /** 某个班在某场地要占的班位数（拼合组里每个班各占各的，不相加） */
   private slotsTakenOn(u: Unit, roomId: number): number {
     const opt = u.roomOptions.find((o) => o.roomId === roomId)
-    const per = opt ? opt.slotsTaken : 1
-    return per * Math.max(1, u.classIds.length)
+    return opt ? opt.slotsTaken : 1
   }
 
   /** 班级 / 教师 / 互斥组是否都空着（不含场地） */
@@ -71,54 +69,76 @@ export class Board {
     return true
   }
 
-  /** 在给定窗口上挑一个可用场地；返回 null 表示这节课不占场地资源 */
-  private pickRoom(u: Unit, slotIds: number[]): { ok: boolean; roomId: number | null } {
-    // ★ 需专用教室的课（H6）只认候选清单，**绝不回退到班级固定教室**：
-    //   回退会让"实验课排进普通教室"这种错误静悄悄地通过。
-    const options = u.needRoom
-      ? u.roomOptions
-      : u.roomOptions.length > 0
-        ? u.roomOptions
-        : u.homeRoomId != null
-          ? [{ roomId: u.homeRoomId, slotsTaken: 1, priority: 0 }]
-          : []
-    // 无场地要求且班级没有固定教室 → 不占场地（H3 不适用）
-    if (options.length === 0) return { ok: !u.needRoom, roomId: null }
+  /**
+   * 为单元里的**每个班**各挑一个可用场地。
+   *
+   * 口径（2026-09-29 确认）：拼合 / 同时上课组只要求**同一时段**，
+   * 场地各班各占各的，人数按单班核（H3b），班位按单班计（H3）。
+   * 两个班拼班上通用技术 = 同时占用通用技术室 1 和 2，而不是挤进同一间。
+   * 因此这里要在本次放置内部维护一份"临时增量"，避免两个班选到同一间把容量吃爆。
+   */
+  private pickRooms(u: Unit, slotIds: number[]): { ok: boolean; roomIds: (number | null)[] } {
+    const pending = new Map<string, number>() // `roomIdx#slotIdx` → 本次放置已预占的班位
+    const roomIds: (number | null)[] = []
 
-    let best: { roomId: number; load: number } | null = null
-    for (const o of [...options].sort((a, b) => a.priority - b.priority)) {
-      const ri = this.ctx.roomIdx.get(o.roomId)
-      if (ri == null) continue
-      if (this.ctx.roomSeats[ri] < u.studentCount) continue // H3b
-      const need = this.slotsTakenOn(u, o.roomId)
-      let fits = true
-      let load = 0
-      for (const si of slotIds) {
-        if (!this.occ.rooms.fits(ri, si, u.weekMask, need, this.ctx.roomConcurrent[ri])) {
-          fits = false
-          break
-        }
-        load += this.occ.rooms.peak(ri, si, u.weekMask)
+    for (let k = 0; k < u.classIds.length; k++) {
+      const seats = u.studentCounts[k] ?? u.studentCount
+      const home = u.classIds.length > 0 ? this.ctx.homeRoomOf.get(u.classIds[k]) ?? null : null
+      // ★ 需专用教室的课（H6）只认候选清单，**绝不回退到班级固定教室**：
+      //   回退会让"实验课排进普通教室"这种错误静悄悄地通过。
+      const options = u.needRoom
+        ? u.roomOptions
+        : u.roomOptions.length > 0
+          ? u.roomOptions
+          : home != null
+            ? [{ roomId: home, slotsTaken: 1, priority: 0 }]
+            : []
+      if (options.length === 0) {
+        if (u.needRoom) return { ok: false, roomIds: [] }
+        roomIds.push(null) // 无场地要求且没有固定教室 → 这节课不占场地
+        continue
       }
-      // 优先级相同的场地里挑最空的，避免都挤田径场（S15 的雏形，M5 再细化）
-      if (fits && (best == null || load < best.load)) best = { roomId: o.roomId, load }
+
+      let best: { roomId: number; load: number } | null = null
+      for (const o of [...options].sort((a, b) => a.priority - b.priority)) {
+        const ri = this.ctx.roomIdx.get(o.roomId)
+        if (ri == null) continue
+        if (this.ctx.roomSeats[ri] < seats) continue // H3b 人数容量
+        const need = o.slotsTaken
+        let fits = true
+        let load = 0
+        for (const si of slotIds) {
+          const extra = pending.get(`${ri}#${si}`) ?? 0
+          if (
+            !this.occ.rooms.fits(ri, si, u.weekMask, need + extra, this.ctx.roomConcurrent[ri])
+          ) {
+            fits = false
+            break
+          }
+          load += this.occ.rooms.peak(ri, si, u.weekMask) + extra
+        }
+        // 同优先级里挑最空的，避免都挤田径场（S15 的雏形，M5 再细化）
+        if (fits && (best == null || load < best.load)) best = { roomId: o.roomId, load }
+      }
+      if (!best) return { ok: false, roomIds: [] }
+      roomIds.push(best.roomId)
+      const ri = this.ctx.roomIdx.get(best.roomId)!
+      for (const si of slotIds) {
+        pending.set(`${ri}#${si}`, (pending.get(`${ri}#${si}`) ?? 0) + this.slotsTakenOn(u, best.roomId))
+      }
     }
-    return best ? { ok: true, roomId: best.roomId } : { ok: false, roomId: null }
+    return { ok: true, roomIds }
   }
 
   canPlace(u: Unit, windowId: number): PlacementProbe {
     const slotIds = this.ctx.windows[windowId]
-    if (!this.nonRoomFree(u, slotIds)) return { ok: false, roomId: null, roomSlotsTaken: 0 }
-    const room = this.pickRoom(u, slotIds)
-    if (!room.ok) return { ok: false, roomId: null, roomSlotsTaken: 0 }
-    return {
-      ok: true,
-      roomId: room.roomId,
-      roomSlotsTaken: room.roomId == null ? 0 : this.slotsTakenOn(u, room.roomId)
-    }
+    if (!this.nonRoomFree(u, slotIds)) return { ok: false, roomIds: [] }
+    const rooms = this.pickRooms(u, slotIds)
+    if (!rooms.ok) return { ok: false, roomIds: [] }
+    return { ok: true, roomIds: rooms.roomIds }
   }
 
-  place(u: Unit, windowId: number, roomId: number | null): void {
+  place(u: Unit, windowId: number, roomIds: (number | null)[]): void {
     const slotIds = this.ctx.windows[windowId]
     for (const si of slotIds) {
       for (const c of u.classIds) {
@@ -130,7 +150,8 @@ export class Board {
         if (ti != null) this.occ.teachers.occupy(ti, si, u.weekMask)
       }
       for (const gi of u.mutexGroupIds) this.occ.groups.occupy(gi, si, u.weekMask, 1)
-      if (roomId != null) {
+      for (const roomId of roomIds) {
+        if (roomId == null) continue
         const ri = this.ctx.roomIdx.get(roomId)
         if (ri != null) this.occ.rooms.occupy(ri, si, u.weekMask, this.slotsTakenOn(u, roomId))
       }
@@ -140,7 +161,8 @@ export class Board {
       unitId: u.id,
       slotId: this.ctx.slots[slotIds[0]].id,
       slotIds: slotIds.map((si) => this.ctx.slots[si].id),
-      roomId
+      roomIds: [...roomIds],
+      roomId: roomIds[0] ?? null
     })
     this.windowOf.set(u.id, windowId)
   }
@@ -160,9 +182,10 @@ export class Board {
         if (ti != null) this.occ.teachers.release(ti, si, u.weekMask)
       }
       for (const gi of u.mutexGroupIds) this.occ.groups.release(gi, si, u.weekMask, 1)
-      if (a.roomId != null) {
-        const ri = this.ctx.roomIdx.get(a.roomId)
-        if (ri != null) this.occ.rooms.release(ri, si, u.weekMask, this.slotsTakenOn(u, a.roomId))
+      for (const roomId of a.roomIds) {
+        if (roomId == null) continue
+        const ri = this.ctx.roomIdx.get(roomId)
+        if (ri != null) this.occ.rooms.release(ri, si, u.weekMask, this.slotsTakenOn(u, roomId))
       }
       this.unitsBySlot[si].delete(unitId)
     }
@@ -194,18 +217,18 @@ export class Board {
     }
     if (out.size > 0) return [...out]
     // 走到这里说明布尔资源都空着，那阻塞一定来自场地容量：顶掉同场地的占用者
-    const wanted = new Set(
-      (u.roomOptions.length > 0
+    const wanted = new Set<number>(
+      u.roomOptions.length > 0
         ? u.roomOptions.map((o) => o.roomId)
         : u.homeRoomId != null
           ? [u.homeRoomId]
-          : []) as number[]
+          : []
     )
     for (const si of slotIds) {
       for (const other of this.unitsBySlot[si]) {
         if (other === u.id) continue
         const a = this.assignments.get(other)
-        if (a?.roomId != null && wanted.has(a.roomId)) out.add(other)
+        if (a?.roomIds.some((r) => r != null && wanted.has(r))) out.add(other)
       }
     }
     return [...out]
@@ -213,7 +236,12 @@ export class Board {
 
   toSolution(seed: number, unplaced: number[]): Solution {
     return {
-      assignments: new Map([...this.assignments].map(([k, v]) => [k, { ...v, slotIds: [...v.slotIds] }])),
+      assignments: new Map(
+        [...this.assignments].map(([k, v]) => [
+          k,
+          { ...v, slotIds: [...v.slotIds], roomIds: [...v.roomIds] }
+        ])
+      ),
       unplaced: [...unplaced],
       seed
     }

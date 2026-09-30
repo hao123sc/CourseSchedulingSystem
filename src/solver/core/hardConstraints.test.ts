@@ -22,7 +22,13 @@ function handMade(
     assignments: new Map(
       entries.map((e) => [
         e.unitId,
-        { unitId: e.unitId, slotId: e.slotIds[0], slotIds: e.slotIds, roomId: e.roomId ?? null }
+        {
+          unitId: e.unitId,
+          slotId: e.slotIds[0],
+          slotIds: e.slotIds,
+          roomIds: [e.roomId ?? null],
+          roomId: e.roomId ?? null
+        }
       ])
     ),
     unplaced: [],

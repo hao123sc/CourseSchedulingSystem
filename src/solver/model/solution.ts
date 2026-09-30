@@ -52,7 +52,9 @@ export interface Unit {
   roomOptions: UnitRoomOption[]
   /** 班级固定教室（普通课默认落这里） */
   homeRoomId: number | null
-  /** 本单元覆盖的学生人数之和（H3b 人数容量） */
+  /** 各班人数，与 classIds 一一对应（H3b 人数容量按**单班**核算） */
+  studentCounts: number[]
+  /** 各班人数的最大值，快速筛场地用 */
   studentCount: number
   importance: number
   /** 拼合 / 同时上课组 id（H9），仅用于诊断展示 */
@@ -69,7 +71,13 @@ export interface Assignment {
   slotId: number
   /** 块单元实际占用的全部 slot（size=1 时长度为 1） */
   slotIds: number[]
-  /** 落位场地；无场地要求且班级无固定教室时为 null */
+  /**
+   * 各班落位的场地，与 Unit.classIds 一一对应；不占场地时为 null。
+   * 拼合组（H9）是「同时段、各班各占一间场地」，所以这里是数组而不是单值 ——
+   * 两个班拼班上通用技术，是分在通用技术室 1 和 2，不是挤进同一间。
+   */
+  roomIds: (number | null)[]
+  /** 首个班级的场地，单班课（绝大多数）直接读它 */
   roomId: number | null
 }
 
@@ -124,7 +132,10 @@ export function emptySolution(seed = 0): Solution {
 export function cloneSolution(sol: Solution): Solution {
   return {
     assignments: new Map(
-      [...sol.assignments].map(([k, v]) => [k, { ...v, slotIds: [...v.slotIds] }])
+      [...sol.assignments].map(([k, v]) => [
+        k,
+        { ...v, slotIds: [...v.slotIds], roomIds: [...v.roomIds] }
+      ])
     ),
     unplaced: [...sol.unplaced],
     seed: sol.seed

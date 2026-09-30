@@ -22,7 +22,8 @@
     "preview:ui": "vite --config vite.preview.config.ts",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:linux": "npm run build && electron-builder --linux",
-    "build:win": "npm run build && electron-builder --win"
+    "build:win": "npm run build && electron-builder --win",
+    "bench": "vitest run --config vitest.bench.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

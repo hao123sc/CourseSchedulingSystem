@@ -143,22 +143,61 @@ export function verifyHardConstraints(
         })
       }
 
-      // H1 班级唯一 / H7 预排不可侵占
-      for (const c of u.classIds) {
+      // H1 班级唯一 / H7 预排不可侵占 / H3 场地并发 / H3b 人数容量（逐班核）
+      u.classIds.forEach((c, k) => {
         const ci = ctx.classIdx.get(c)
-        if (ci == null) continue
-        if (classBits.conflicts(ci, si, u.weekMask)) {
-          const fixed = fixedCells.has(`C${ci}#${si}`)
+        if (ci != null) {
+          if (classBits.conflicts(ci, si, u.weekMask)) {
+            const fixed = fixedCells.has(`C${ci}#${si}`)
+            out.push({
+              code: fixed ? 'H7' : 'H1',
+              message: `${classById.get(c)?.name ?? '班级' + c} 在${slotName(si)}已有${classOwner.get(`${ci}#${si}`) ?? '其他课'}`,
+              unitIds: [unitId],
+              slotId: a.slotId
+            })
+          }
+          classBits.occupy(ci, si, u.weekMask)
+          classOwner.set(`${ci}#${si}`, `「${subjectById.get(u.subjectId)?.name ?? u.subjectId}」`)
+        }
+
+        // 拼合组里每个班各占各的场地，逐班核 H3 / H3b / H6
+        const roomId = a.roomIds[k] ?? null
+        if (roomId == null) return
+        const ri = ctx.roomIdx.get(roomId)
+        if (ri == null) {
+          out.push({ code: 'H6', message: `单元 #${unitId} 落在不存在的场地上`, unitIds: [unitId] })
+          return
+        }
+        const opt = u.roomOptions.find((o) => o.roomId === roomId)
+        const need = opt ? opt.slotsTaken : 1
+        if (!roomLoad.fits(ri, si, u.weekMask, need, ctx.roomConcurrent[ri])) {
+          const fixed = fixedCells.has(`R${ri}#${si}`)
           out.push({
-            code: fixed ? 'H7' : 'H1',
-            message: `${classById.get(c)?.name ?? '班级' + c} 在${slotName(si)}已有${classOwner.get(`${ci}#${si}`) ?? '其他课'}`,
+            code: fixed ? 'H7' : 'H3',
+            message: `场地 #${roomId} 在${slotName(si)}并发容量不足（上限 ${ctx.roomConcurrent[ri]} 个班位）`,
             unitIds: [unitId],
             slotId: a.slotId
           })
         }
-        classBits.occupy(ci, si, u.weekMask)
-        classOwner.set(`${ci}#${si}`, `「${subjectById.get(u.subjectId)?.name ?? u.subjectId}」`)
-      }
+        roomLoad.occupy(ri, si, u.weekMask, need)
+        const seats = u.studentCounts[k] ?? u.studentCount
+        if (ctx.roomSeats[ri] < seats) {
+          out.push({
+            code: 'H3b',
+            message: `场地 #${roomId} 座位 ${ctx.roomSeats[ri]} 个，坐不下 ${seats} 人`,
+            unitIds: [unitId],
+            slotId: a.slotId
+          })
+        }
+        if (u.needRoom && !u.roomOptions.some((o) => o.roomId === roomId)) {
+          out.push({
+            code: 'H6',
+            message: `「${subjectById.get(u.subjectId)?.name ?? u.subjectId}」必须排在专用场地，当前场地不在允许清单内`,
+            unitIds: [unitId],
+            slotId: a.slotId
+          })
+        }
+      })
 
       // H2 教师唯一
       for (const t of u.teacherIds) {
@@ -190,44 +229,14 @@ export function verifyHardConstraints(
         groupLoad.occupy(gi, si, u.weekMask, 1)
       }
 
-      // H3 场地并发 / H3b 人数容量 / H6 教室匹配
-      if (a.roomId != null) {
-        const ri = ctx.roomIdx.get(a.roomId)
-        if (ri == null) {
-          out.push({ code: 'H6', message: `单元 #${unitId} 落在不存在的场地上`, unitIds: [unitId] })
-        } else {
-          const opt = u.roomOptions.find((o) => o.roomId === a.roomId)
-          const need = (opt ? opt.slotsTaken : 1) * Math.max(1, u.classIds.length)
-          if (!roomLoad.fits(ri, si, u.weekMask, need, ctx.roomConcurrent[ri])) {
-            const fixed = fixedCells.has(`R${ri}#${si}`)
-            out.push({
-              code: fixed ? 'H7' : 'H3',
-              message: `场地 #${a.roomId} 在${slotName(si)}并发容量不足（上限 ${ctx.roomConcurrent[ri]} 个班位）`,
-              unitIds: [unitId],
-              slotId: a.slotId
-            })
-          }
-          roomLoad.occupy(ri, si, u.weekMask, need)
-          if (ctx.roomSeats[ri] < u.studentCount) {
-            out.push({
-              code: 'H3b',
-              message: `场地 #${a.roomId} 座位 ${ctx.roomSeats[ri]} 个，坐不下 ${u.studentCount} 人`,
-              unitIds: [unitId],
-              slotId: a.slotId
-            })
-          }
-        }
-      }
-      if (u.needRoom) {
-        const allowed = u.roomOptions.map((o) => o.roomId)
-        if (a.roomId == null || !allowed.includes(a.roomId)) {
-          out.push({
-            code: 'H6',
-            message: `「${subjectById.get(u.subjectId)?.name ?? u.subjectId}」必须排在专用场地，当前场地不在允许清单内`,
-            unitIds: [unitId],
-            slotId: a.slotId
-          })
-        }
+      // 需专用场地却压根没给场地
+      if (u.needRoom && u.classIds.some((_, k) => (a.roomIds[k] ?? null) == null)) {
+        out.push({
+          code: 'H6',
+          message: `「${subjectById.get(u.subjectId)?.name ?? u.subjectId}」必须排在专用场地，当前没有分配场地`,
+          unitIds: [unitId],
+          slotId: a.slotId
+        })
       }
     }
   }

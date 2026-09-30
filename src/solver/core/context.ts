@@ -30,6 +30,9 @@ export interface SolverContext {
   groupIdx: Map<number, number>
   groupCapacity: number[]
 
+  /** classId → 有效的固定教室 id（指向不存在的教室时不收录） */
+  homeRoomOf: Map<number, number>
+
   /** 场地并发容量 / 座位数，按 roomIdx 排列 */
   roomConcurrent: Uint16Array
   roomSeats: Int32Array
@@ -314,7 +317,8 @@ export function buildContext(input: SolverInput): SolverContext {
     // 否则这个班的每节课都会因为找不到场地而排不出来
     const rawHome = classIds.length === 1 ? (classById.get(classIds[0])?.homeRoomId ?? null) : null
     const homeRoomId = rawHome != null && roomIdx.has(rawHome) ? rawHome : null
-    const studentCount = classIds.reduce((s, c) => s + (classById.get(c)?.studentCount ?? 0), 0)
+    const studentCounts = classIds.map((c) => classById.get(c)?.studentCount ?? 0)
+    const studentCount = Math.max(0, ...studentCounts)
 
     pushUnit({
       taskIds: [...new Set(drafts.map((d) => d.taskId))],
@@ -329,6 +333,7 @@ export function buildContext(input: SolverInput): SolverContext {
       needRoom,
       roomOptions,
       homeRoomId,
+      studentCounts,
       studentCount,
       importance: subject?.importance ?? 3,
       mergeGroupId,
@@ -401,9 +406,15 @@ export function buildContext(input: SolverInput): SolverContext {
     return candidates.filter((wid) => windows[wid].every((si) => ruleValueOf(u.id, si) !== 'FORBIDDEN'))
   })
 
+  const homeRoomOf = new Map<number, number>()
+  for (const c of input.classes) {
+    if (c.homeRoomId != null && roomIdx.has(c.homeRoomId)) homeRoomOf.set(c.id, c.homeRoomId)
+  }
+
   return {
     input,
     slots,
+    homeRoomOf,
     slotIdx,
     classIdx,
     teacherIdx,
