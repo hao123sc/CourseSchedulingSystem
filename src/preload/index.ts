@@ -127,6 +127,10 @@ const zhikepaiApi: {
   'schedule:cancel': () => ipcRenderer.invoke('schedule:cancel'),
   'schedule:isRunning': () => ipcRenderer.invoke('schedule:isRunning'),
 
+  // ---- 课表（M4） ----
+  'timetable:versionLessons': (versionId) =>
+    ipcRenderer.invoke('timetable:versionLessons', versionId),
+
   // ---- 事件订阅（Main → Renderer） ----
   onScheduleEvent: (cb) => {
     const listener = (_e: unknown, payload: ScheduleEventPayload): void => cb(payload)

@@ -15,6 +15,7 @@ import type {
   ClassroomInput,
   ClassBatchInput,
   ConstraintGroup,
+  Lesson,
   ConstraintGroupInput,
   CurriculumApplyResult,
   ExcelExportResult,
@@ -215,7 +216,7 @@ export interface IpcApi {
   'schedule:isRunning': () => boolean
 
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8 占位） ----
-  // 'timetable:byClass': (classId: number) => unknown
+  'timetable:versionLessons': (versionId: number) => Lesson[]
   // 'report:health': (versionId: number) => unknown
   // 'export:excel': (p: unknown) => { filePath: string }
   // 'seed:load': (preset: 'primary' | 'junior' | 'senior') => void
