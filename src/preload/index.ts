@@ -1,13 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { IpcApi } from '@shared/types/ipc'
+import type { IpcApi, ScheduleEventPayload } from '@shared/types/ipc'
 
 /**
  * 类型化 IPC 客户端：每个通道都是 `invoke` 的薄封装，禁止渲染进程直接拿到 ipcRenderer。
  * 新增通道时先在 `@shared/types/ipc.ts` 的 IpcApi 声明签名，再在这里加一行转发。
+ * 事件推送（Main → Renderer）单独暴露 onScheduleEvent，返回取消订阅函数。
  */
 const zhikepaiApi: {
   [K in keyof IpcApi]: (...args: Parameters<IpcApi[K]>) => Promise<ReturnType<IpcApi[K]>>
+} & {
+  onScheduleEvent: (cb: (payload: ScheduleEventPayload) => void) => () => void
 } = {
   'system:ping': () => ipcRenderer.invoke('system:ping'),
   'healthCheck:list': () => ipcRenderer.invoke('healthCheck:list'),
@@ -116,10 +119,20 @@ const zhikepaiApi: {
   'solver:checkInput': (semesterId, code) =>
     ipcRenderer.invoke('solver:checkInput', semesterId, code),
 
-  // ---- 课表版本（M3 后半段） ----
-  'schedule:listVersions': (semesterId) =>
-    ipcRenderer.invoke('schedule:listVersions', semesterId),
-  'schedule:deleteVersion': (id) => ipcRenderer.invoke('schedule:deleteVersion', id)
+  // ---- 课表版本与排课执行（M3 后半段） ----
+  'schedule:listVersions': (semesterId) => ipcRenderer.invoke('schedule:listVersions', semesterId),
+  'schedule:deleteVersion': (id) => ipcRenderer.invoke('schedule:deleteVersion', id),
+  'schedule:start': (semesterId, options) =>
+    ipcRenderer.invoke('schedule:start', semesterId, options),
+  'schedule:cancel': () => ipcRenderer.invoke('schedule:cancel'),
+  'schedule:isRunning': () => ipcRenderer.invoke('schedule:isRunning'),
+
+  // ---- 事件订阅（Main → Renderer） ----
+  onScheduleEvent: (cb) => {
+    const listener = (_e: unknown, payload: ScheduleEventPayload): void => cb(payload)
+    ipcRenderer.on('schedule:event', listener)
+    return () => ipcRenderer.removeListener('schedule:event', listener)
+  }
 }
 
 if (process.contextIsolated) {

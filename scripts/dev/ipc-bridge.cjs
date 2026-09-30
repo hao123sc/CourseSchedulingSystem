@@ -18,6 +18,16 @@ const fs = require('fs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 
+/** 预览模式下 Main → Renderer 事件的落地队列（渲染端轮询 GET /api/schedule-events 取走） */
+const eventQueue = []
+const eventSink = {
+  send: (_channel, payload) => {
+    // 队列有界：轮询挂了也不能把内存吃爆
+    if (eventQueue.length > 500) eventQueue.splice(0, eventQueue.length - 500)
+    eventQueue.push(payload)
+  }
+}
+
 async function buildIpcBundle() {
   const esbuild = require('esbuild')
   // 必须落在项目内，否则 bundle 里对 exceljs 等 external 依赖的 require 解析不到 node_modules
@@ -48,6 +58,21 @@ async function buildIpcBundle() {
     exports.shell = { openExternal: async () => {}, showItemInFolder: () => {} }
     globalThis.__zhikepaiIpcHandlers = handlers
   `
+
+  // ── 排课 worker 产物：solverRunService 通过 ZHIKEPAI_SOLVER_WORKER 找到它 ──
+  // 与 ipc bundle 分开构建（worker 是独立入口，不带 electron 桩）
+  const workerOut = path.join(cacheDir, 'solverWorker.cjs')
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, 'src/main/solver/solverWorker.ts')],
+    outfile: workerOut,
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    target: 'node20',
+    logLevel: 'warning',
+    tsconfig: path.join(ROOT, 'tsconfig.node.json')
+  })
+  process.env.ZHIKEPAI_SOLVER_WORKER = workerOut
 
   await esbuild.build({
     entryPoints: [path.join(ROOT, 'src/main/ipc/index.ts')],
@@ -112,7 +137,19 @@ function readBody(req) {
  */
 function createIpcMiddleware() {
   return async function ipcMiddleware(req, res, next) {
-    if (!req.url || !req.url.startsWith('/api/ipc')) return next()
+    if (!req.url || !req.url.startsWith('/api/')) return next()
+    // 渲染端事件轮询：取走预览桥替 webContents.send 收的事件
+    if (req.url.startsWith('/api/schedule-events')) {
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        return res.end('only GET')
+      }
+      await getHandlers() // 确保桥已就绪
+      const events = eventQueue.splice(0, eventQueue.length)
+      res.setHeader('content-type', 'application/json')
+      return res.end(JSON.stringify({ events }))
+    }
+    if (!req.url.startsWith('/api/ipc')) return next()
     if (req.method !== 'POST') {
       res.statusCode = 405
       return res.end('only POST')
@@ -126,7 +163,9 @@ function createIpcMiddleware() {
         res.setHeader('content-type', 'application/json')
         return res.end(JSON.stringify({ error: `未注册的 IPC 通道：${channel}` }))
       }
-      const result = await handler({}, ...args)
+      // 预览里没有真正的 webContents：给 handler 一个替身 sender，
+      // schedule:start 的进度/结果事件会落进 eventQueue 由渲染端轮询
+      const result = await handler({ sender: eventSink }, ...args)
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ result: result === undefined ? null : result }))
     } catch (err) {

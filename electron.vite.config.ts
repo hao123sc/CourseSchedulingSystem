@@ -14,7 +14,11 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve('src/main/index.ts')
+          index: resolve('src/main/index.ts'),
+          // 排课 worker 独立产物（worker_threads 用）：纯引擎代码，无原生依赖；
+          // 打包时由 electron-builder.yml 的 asarUnpack 解出 asar（worker_threads
+          // 读不了 asar 内部路径）。运行期路径解析见 solverRunService.resolveWorkerPath
+          solverWorker: resolve('src/main/solver/solverWorker.ts')
         }
       }
     }

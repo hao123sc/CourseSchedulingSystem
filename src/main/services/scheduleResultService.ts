@@ -86,10 +86,13 @@ export function saveSchedule(p: SaveScheduleParams): SaveScheduleResult {
   }
 
   const taskOf = new Map<string, number>()
+  /** 本学期「真的有人在上」的学科：班会这类全学期无任务的纯占位不算数据不一致 */
+  const subjectsWithTasks = new Set<number>()
   const taskRows = db
     .prepare('SELECT id, class_id, subject_id FROM teaching_task WHERE semester_id = ?')
     .all(p.semesterId) as { id: number; class_id: number; subject_id: number }[]
   for (const t of taskRows) {
+    subjectsWithTasks.add(t.subject_id)
     const k = `${t.class_id}:${t.subject_id}`
     if (!taskOf.has(k)) taskOf.set(k, t.id)
   }
@@ -150,11 +153,15 @@ export function saveSchedule(p: SaveScheduleParams): SaveScheduleResult {
     let lockedCount = 0
     let skippedFixed = 0
     for (const f of fixedRows) {
+      // 班会这类「带学科但全学期无教学任务」的占位：不是课，由课表页叠加
+      // fixed_lesson 显示（升旗 / 早读 / 晚自习同路），不计入 skippedFixed
+      if (!subjectsWithTasks.has(f.subject_id)) continue
       const classIds =
         f.class_id != null ? [f.class_id] : (classesInGrade.get(f.grade_id ?? -1) ?? [])
       for (const cid of classIds) {
         const taskId = taskOf.get(`${cid}:${f.subject_id}`)
         if (taskId == null) {
+          // 该学科别的班在开、这个班却没开——预排钉了一节不存在的课，值得报出来
           skippedFixed += 1
           continue
         }

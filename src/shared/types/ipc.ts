@@ -53,6 +53,9 @@ import type {
 import type { FixedLessonConflict } from '../constraints'
 import type { SolverInput } from '../../solver/model/types'
 import type { SolverInputReport } from '../../solver/model/validate'
+import type { Diagnosis } from '../../solver/core/diagnosis'
+import type { HardViolation, PlacedLesson } from '../../solver/model/solution'
+import type { SolvePhase } from '../../solver/solve'
 
 /** M0：系统自检，验证主进程存活与版本信息可读 */
 export interface SystemPingResult {
@@ -202,9 +205,14 @@ export interface IpcApi {
   'solver:buildInput': (semesterId: number, weightProfileCode?: string) => SolverInput
   'solver:checkInput': (semesterId: number, weightProfileCode?: string) => SolverInputReport
 
-  // ---- 课表版本（M3 后半段；start/cancel 随 Worker 封装接上） ----
+  // ---- 课表版本与排课执行（M3 后半段） ----
   'schedule:listVersions': (semesterId: number) => ScheduleVersion[]
   'schedule:deleteVersion': (id: number) => void
+  /** 启动一次排课（多起点 worker 真并行），进度与结果经 schedule:event 事件推送 */
+  'schedule:start': (semesterId: number, options?: ScheduleStartOptions) => { runId: string }
+  /** 取消进行中的排课（terminate worker，不落库） */
+  'schedule:cancel': () => boolean
+  'schedule:isRunning': () => boolean
 
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8 占位） ----
   // 'timetable:byClass': (classId: number) => unknown
@@ -215,12 +223,71 @@ export interface IpcApi {
 
 export type IpcChannel = keyof IpcApi
 
-/** Main → Renderer 的事件推送通道（M3 起使用），先占位固定命名 */
+// ---- 排课执行（M3）· 事件与结果载荷 ----
+
+/** schedule:start 的可选参数 */
+export interface ScheduleStartOptions {
+  /** 风格档位 code，默认 balanced */
+  weightProfileCode?: string
+  /** 多起点数，默认 min(CPU, 8)（docs/04 §4.4） */
+  starts?: number
+  /** 构造阶段时间预算（毫秒），默认 30s */
+  timeBudgetMs?: number
+  seed?: number
+}
+
+/** solve() 结果的展示投影（跨 worker / IPC 边界的那部分） */
+export interface SolveSummaryPayload {
+  status: 'solved' | 'partial' | 'infeasible' | 'cancelled'
+  seed: number
+  unplacedCount: number
+  violations: HardViolation[]
+  diagnostics: Diagnosis[]
+  lessons: PlacedLesson[]
+  stats: {
+    units: number
+    periods: number
+    assignedPeriods: number
+    fixedPeriods: number
+    starts: number
+    elapsedMs: number
+    prunedByAc3: number
+    accidentalBlocks: number
+  }
+}
+
+/** 排课进度事件（单一通道 schedule:event，type 区分） */
+export interface ScheduleProgressPayload {
+  type: 'progress'
+  runId: string
+  /** 0~1，多起点按各自最新进度折算 */
+  ratio: number
+  message: string
+  phase: SolvePhase
+  start: number
+  totalStarts: number
+}
+
+/** 排课结束事件 */
+export interface ScheduleDonePayload {
+  type: 'done'
+  runId: string
+  status: 'solved' | 'partial' | 'infeasible' | 'cancelled' | 'failed'
+  /** 成功落库后的版本（infeasible / cancelled / failed 为 null） */
+  versionId: number | null
+  versionName: string | null
+  lessonCount: number
+  lockedCount: number
+  skippedFixed: number
+  summary: SolveSummaryPayload | null
+  error?: string
+}
+
+export type ScheduleEventPayload = ScheduleProgressPayload | ScheduleDonePayload
+
+/** Main → Renderer 的事件推送通道 */
 export type IpcEvents = {
-  // 'schedule:progress': (p: unknown) => void
-  // 'schedule:done': (p: unknown) => void
-  // 'schedule:failed': (p: unknown) => void
-  readonly __placeholder__?: never
+  'schedule:event': (payload: ScheduleEventPayload) => void
 }
 
 export type IpcEventChannel = keyof IpcEvents

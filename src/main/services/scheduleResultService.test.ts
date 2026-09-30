@@ -66,36 +66,37 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
 
     // ── 最小种子：初中部 1 个年级 2 个班 ──
     ids.semesterId = Number(
-      run(`INSERT INTO semester (name, is_current) VALUES ('2026-2027学年第一学期', 1)`)
-        .run().lastInsertRowid
+      run(`INSERT INTO semester (name, is_current) VALUES ('2026-2027学年第一学期', 1)`).run()
+        .lastInsertRowid
     )
-    ids.stageId = (
-      run('SELECT id FROM stage WHERE code = ?').get('junior') as { id: number }
-    ).id
+    ids.stageId = (run('SELECT id FROM stage WHERE code = ?').get('junior') as { id: number }).id
     ids.gradeId = Number(
-      run(`INSERT INTO grade (semester_id, stage_id, name, sort_order) VALUES (?, ?, '初一', 1)`)
-        .run(ids.semesterId, ids.stageId).lastInsertRowid
+      run(
+        `INSERT INTO grade (semester_id, stage_id, name, sort_order) VALUES (?, ?, '初一', 1)`
+      ).run(ids.semesterId, ids.stageId).lastInsertRowid
     )
     for (let i = 1; i <= 2; i++) {
       const rid = Number(
-        run(`INSERT INTO classroom (name, room_type, capacity, concurrent_capacity) VALUES (?, 'normal', 50, 1)`)
-          .run(`教室${i}`).lastInsertRowid
+        run(
+          `INSERT INTO classroom (name, room_type, capacity, concurrent_capacity) VALUES (?, 'normal', 50, 1)`
+        ).run(`教室${i}`).lastInsertRowid
       )
       ids.roomIds.push(rid)
       ids.classIds.push(
         Number(
           run(
             `INSERT INTO klass (grade_id, name, student_count, home_room_id, sort_order) VALUES (?, ?, 45, ?, ?)`
-          )
-            .run(ids.gradeId, `初一(${i})班`, rid, i).lastInsertRowid
+          ).run(ids.gradeId, `初一(${i})班`, rid, i).lastInsertRowid
         )
       )
     }
     for (let i = 1; i <= 2; i++) {
       ids.teacherIds.push(
         Number(
-          run(`INSERT INTO teacher (name, staff_no, max_weekly_periods) VALUES (?, ?, 20)`)
-            .run(`老师${i}`, `T00${i}`).lastInsertRowid
+          run(`INSERT INTO teacher (name, staff_no, max_weekly_periods) VALUES (?, ?, 20)`).run(
+            `老师${i}`,
+            `T00${i}`
+          ).lastInsertRowid
         )
       )
     }
@@ -106,8 +107,7 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
       run(
         `INSERT INTO teaching_task (semester_id, class_id, subject_id, teacher_id, weekly_periods, consecutive_count, consecutive_size)
          VALUES (?, ?, ?, ?, 4, 1, 2)`
-      )
-        .run(ids.semesterId, ids.classIds[0], chinese.id, ids.teacherIds[0]).lastInsertRowid
+      ).run(ids.semesterId, ids.classIds[0], chinese.id, ids.teacherIds[0]).lastInsertRowid
     )
     run(
       `INSERT INTO teaching_task (semester_id, class_id, subject_id, teacher_id, weekly_periods)
@@ -121,6 +121,21 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
       `INSERT INTO teaching_task (semester_id, class_id, subject_id, teacher_id, weekly_periods)
        VALUES (?, ?, ?, ?, 2)`
     ).run(ids.semesterId, ids.classIds[1], math.id, ids.teacherIds[1])
+    // 体育只在 2 班开课：1 班的体育预排才是「钉了一节不存在的课」
+    run(
+      `INSERT INTO teaching_task (semester_id, class_id, subject_id, teacher_id, weekly_periods)
+       VALUES (?, ?, ?, ?, 2)`
+    ).run(ids.semesterId, ids.classIds[1], pe.id, ids.teacherIds[1])
+    // 体育要专用场地（need_special_room=1）：补一块操场并绑定
+    const playground = Number(
+      run(
+        `INSERT INTO classroom (name, room_type, capacity, concurrent_capacity) VALUES ('操场', 'sports', 300, 2)`
+      ).run().lastInsertRowid
+    )
+    run(`INSERT INTO subject_classroom (subject_id, classroom_id) VALUES (?, ?)`).run(
+      pe.id,
+      playground
+    )
 
     // 时段：初中周一第 1、2 节（升旗位 = 第 1 节）
     const slotRows = run(
@@ -177,7 +192,9 @@ describe.skipIf(!nativeOk)('M3 · 排课结果落库', () => {
     expect(rows.length).toBe(saved.lessonCount + saved.lockedCount)
 
     // 语文连堂（1×2）共享 consecutive_group，单节课为 null
-    const chineseBlock = rows.filter((x) => x.taskId === ids.chineseTaskId && x.consecutiveGroup != null)
+    const chineseBlock = rows.filter(
+      (x) => x.taskId === ids.chineseTaskId && x.consecutiveGroup != null
+    )
     expect(chineseBlock.length).toBe(2)
     expect(new Set(chineseBlock.map((x) => x.consecutiveGroup)).size).toBe(1)
     for (const x of rows.filter((y) => y.taskId !== ids.chineseTaskId)) {
