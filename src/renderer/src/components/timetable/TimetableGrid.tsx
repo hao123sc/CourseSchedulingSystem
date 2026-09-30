@@ -104,11 +104,14 @@ export function TimetableGrid({
                       )}
                       title={isDropTarget && !isCovered ? (canDrop ? '可以放置' : '存在班级、教师或教室冲突') : undefined}
                       onDragOver={(event) => {
-                        if (draggingLesson && !isCovered && canDrop) event.preventDefault()
+                        // 允许浏览器把 drop 事件交给页面，最终仍由 handleDrop
+                        // 用最新 lessons 再校验一次，避免拖动多次后高亮状态短暂滞后导致
+                        // 合法的「拖回原位置」无法落点。
+                        if (draggingLesson && !isCovered) event.preventDefault()
                       }}
                       onDrop={(event) => {
                         event.preventDefault()
-                        if (draggingLesson && !isCovered && canDrop && sid != null) onDrop?.(sid)
+                        if (draggingLesson && !isCovered && sid != null) onDrop?.(sid)
                       }}
                     >
                       {isCovered ? null : items.length > 0 ? (
