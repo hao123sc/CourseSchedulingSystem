@@ -293,7 +293,7 @@ export function TimetablePage(): React.JSX.Element {
     consecutiveGroup: lesson.consecutiveGroup
   }))
 
-  const handleDrop = (slotId: number): void => {
+  const handleDrop = async (slotId: number): Promise<void> => {
     if (!draggingLesson?.lessonId || draggingLesson.slotId === slotId) return
     const proposal = { lessonId: draggingLesson.lessonId, fromSlotId: draggingLesson.slotId, toSlotId: slotId }
     const conflicts = detectAdjustmentConflicts(adjustmentLessons(), proposal)
@@ -301,32 +301,45 @@ export function TimetablePage(): React.JSX.Element {
       setAdjustmentNotice(conflicts.map((conflict) => conflict.message).join('；'))
       return
     }
-    const command = createAdjustmentCommand(proposal)
-    const next = adjustmentLessons()
-    history.current.execute(command, next)
-    setLessons((previous) => previous.map((lesson) => lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson))
-    setAdjustmentNotice('已移动课程（当前为本地预览，保存接口将在后续 M6 单元接入）')
-    setDraggingLesson(null)
+    try {
+      await api['timetable:moveLesson']({ versionId: versionId!, lessonId: proposal.lessonId, toSlotId: proposal.toSlotId })
+      const command = createAdjustmentCommand(proposal)
+      const next = adjustmentLessons()
+      history.current.execute(command, next)
+      setLessons((previous) => previous.map((lesson) => lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson))
+      setAdjustmentNotice('课程已移动并保存')
+      setDraggingLesson(null)
+    } catch (error) {
+      setAdjustmentNotice(`保存换课失败：${String(error)}`)
+    }
   }
 
-  const handleUndo = (): void => {
-    const next = adjustmentLessons()
-    if (!history.current.undo(next)) return
-    setLessons(next.map((item) => {
-      const original = lessons.find((lesson) => lesson.id === item.id)
-      return original ? { ...original, slotId: item.slotId } : original
-    }).filter((item): item is Lesson => item != null))
-    setAdjustmentNotice('已撤销上一步调整')
+  const handleUndo = async (): Promise<void> => {
+    const command = history.current.nextUndo
+    if (!command) return
+    try {
+      await api['timetable:moveLesson']({ versionId: versionId!, lessonId: command.proposal.lessonId, toSlotId: command.proposal.fromSlotId, reason: '撤销调整' })
+      const next = adjustmentLessons()
+      history.current.undo(next)
+      setLessons((previous) => previous.map((lesson) => lesson.id === command.proposal.lessonId ? { ...lesson, slotId: command.proposal.fromSlotId } : lesson))
+      setAdjustmentNotice('已撤销并保存')
+    } catch (error) {
+      setAdjustmentNotice(`撤销保存失败：${String(error)}`)
+    }
   }
 
-  const handleRedo = (): void => {
-    const next = adjustmentLessons()
-    if (!history.current.redo(next)) return
-    setLessons(next.map((item) => {
-      const original = lessons.find((lesson) => lesson.id === item.id)
-      return original ? { ...original, slotId: item.slotId } : original
-    }).filter((item): item is Lesson => item != null))
-    setAdjustmentNotice('已重做调整')
+  const handleRedo = async (): Promise<void> => {
+    const command = history.current.nextRedo
+    if (!command) return
+    try {
+      await api['timetable:moveLesson']({ versionId: versionId!, lessonId: command.proposal.lessonId, toSlotId: command.proposal.toSlotId, reason: '重做调整' })
+      const next = adjustmentLessons()
+      history.current.redo(next)
+      setLessons((previous) => previous.map((lesson) => lesson.id === command.proposal.lessonId ? { ...lesson, slotId: command.proposal.toSlotId } : lesson))
+      setAdjustmentNotice('已重做并保存')
+    } catch (error) {
+      setAdjustmentNotice(`重做保存失败：${String(error)}`)
+    }
   }
 
   if (semesterId == null) {

@@ -130,6 +130,7 @@ const zhikepaiApi: {
   // ---- 课表（M4） ----
   'timetable:versionLessons': (versionId) =>
     ipcRenderer.invoke('timetable:versionLessons', versionId),
+  'timetable:moveLesson': (payload) => ipcRenderer.invoke('timetable:moveLesson', payload),
 
   // ---- 事件订阅（Main → Renderer） ----
   onScheduleEvent: (cb) => {

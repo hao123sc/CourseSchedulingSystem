@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { getVersionLessons } from '../services/scheduleResultService'
+import { adjustLessonSlot, getVersionLessons } from '../services/scheduleResultService'
 
 /**
  * 课表页（M4）：版本课表行。
@@ -9,5 +9,8 @@ import { getVersionLessons } from '../services/scheduleResultService'
 export function registerTimetableIpc(): void {
   ipcMain.handle('timetable:versionLessons', (_e, versionId: number) =>
     getVersionLessons(versionId)
+  )
+  ipcMain.handle('timetable:moveLesson', (_e, payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) =>
+    adjustLessonSlot(payload)
   )
 }

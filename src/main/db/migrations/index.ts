@@ -4,6 +4,7 @@ import seed003 from './003_seed_subjects.sql?raw'
 import seed004 from './004_seed_weights.sql?raw'
 import m2005 from './005_m2_rules.sql?raw'
 import m006 from './006_fixed_lesson_kind.sql?raw'
+import m007 from './007_adjust_log_index.sql?raw'
 
 export interface Migration {
   /** 单调递增的版本号，与文件名前缀一致，写入 schema_version */
@@ -35,6 +36,11 @@ export function hasColumn(db: MigrationDb, table: string, column: string): boole
   return rows.some((r) => r.name === column)
 }
 
+export function hasIndex(db: MigrationDb, index: string): boolean {
+  const rows = db.prepare(`PRAGMA index_list(adjust_log)`).all() as { name?: string }[]
+  return rows.some((r) => r.name === index)
+}
+
 /**
  * 迁移清单（顺序即执行顺序）。新增结构或种子一律追加新文件 + 新条目，
  * 不修改已发布的历史文件——保证任意旧库都能顺序升级到最新。
@@ -51,5 +57,11 @@ export const MIGRATIONS: Migration[] = [
     sql: m006,
     // ALTER TABLE ADD COLUMN 不幂等，靠这个断言既做自愈触发器又做重放守卫
     verify: (db) => hasColumn(db, 'fixed_lesson', 'kind')
+  },
+  {
+    version: 7,
+    name: '007_adjust_log_index',
+    sql: m007,
+    verify: (db) => hasIndex(db, 'ix_adjust_log_version_created')
   }
 ]

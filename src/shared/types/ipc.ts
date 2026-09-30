@@ -217,6 +217,7 @@ export interface IpcApi {
 
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8 占位） ----
   'timetable:versionLessons': (versionId: number) => Lesson[]
+  'timetable:moveLesson': (payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) => Lesson
   // 'report:health': (versionId: number) => unknown
   // 'export:excel': (p: unknown) => { filePath: string }
   // 'seed:load': (preset: 'primary' | 'junior' | 'senior') => void

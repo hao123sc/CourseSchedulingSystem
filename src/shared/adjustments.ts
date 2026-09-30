@@ -97,4 +97,6 @@ export class AdjustmentHistory {
   }
   get canUndo(): boolean { return this.undoStack.length > 0 }
   get canRedo(): boolean { return this.redoStack.length > 0 }
+  get nextUndo(): AdjustmentCommand | null { return this.undoStack[this.undoStack.length - 1] ?? null }
+  get nextRedo(): AdjustmentCommand | null { return this.redoStack[this.redoStack.length - 1] ?? null }
 }

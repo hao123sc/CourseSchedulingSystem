@@ -243,6 +243,46 @@ export function deleteVersion(id: number): void {
   getDb().prepare('DELETE FROM schedule_version WHERE id = ?').run(id)
 }
 
+export interface AdjustLessonSlotParams {
+  versionId: number
+  lessonId: number
+  toSlotId: number
+  reason?: string
+}
+
+/** M6 持久化单课换位；数据库事务是最后一道锁定课程与版本归属校验。 */
+export function adjustLessonSlot(p: AdjustLessonSlotParams): Lesson {
+  const db = getDb()
+  const tx = db.transaction((): Lesson => {
+    const row = db.prepare(
+      `SELECT id, version_id, task_id, class_id, subject_id, teacher_id, classroom_id,
+              slot_id, week_mode, is_locked, consecutive_group, remark
+         FROM lesson WHERE id = ? AND version_id = ?`
+    ).get(p.lessonId, p.versionId) as {
+      id: number; version_id: number; task_id: number; class_id: number; subject_id: number;
+      teacher_id: number | null; classroom_id: number | null; slot_id: number; week_mode: string;
+      is_locked: number; consecutive_group: string | null; remark: string | null
+    } | undefined
+    if (!row) throw new Error('课程不属于当前课表版本')
+    if (row.is_locked) throw new Error('预排锁定课程不可移动')
+    const slot = db.prepare('SELECT id FROM time_slot WHERE id = ?').get(p.toSlotId) as { id: number } | undefined
+    if (!slot) throw new Error('目标时段不存在')
+    const before = { slotId: row.slot_id }
+    db.prepare('UPDATE lesson SET slot_id = ? WHERE id = ? AND version_id = ?').run(p.toSlotId, p.lessonId, p.versionId)
+    db.prepare(
+      `INSERT INTO adjust_log(version_id, action, before_json, after_json, reason)
+       VALUES (?, 'move', ?, ?, ?)`
+    ).run(p.versionId, JSON.stringify({ lessonId: p.lessonId, ...before }), JSON.stringify({ lessonId: p.lessonId, slotId: p.toSlotId }), p.reason ?? null)
+    return {
+      id: row.id, versionId: row.version_id, taskId: row.task_id, classId: row.class_id,
+      subjectId: row.subject_id, teacherId: row.teacher_id, classroomId: row.classroom_id,
+      slotId: p.toSlotId, weekMode: row.week_mode as Lesson['weekMode'], isLocked: false,
+      consecutiveGroup: row.consecutive_group, remark: row.remark
+    }
+  })
+  return tx()
+}
+
 /** 单个版本的课表行（M4 课表页的数据源之一；预排无学科占位另由 fixed_lesson 叠加） */
 export function getVersionLessons(versionId: number): Lesson[] {
   const rows = getDb()
