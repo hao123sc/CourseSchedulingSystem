@@ -48,16 +48,48 @@ function objective(
   )
 }
 
+function targetedIds(ctx: SolverContext, current: Solution): number[] {
+  const teacherDays = new Map<string, { unitIds: Set<number>; periods: number[] }>()
+  const afternoon: number[] = []
+  for (const [id, assignment] of current.assignments) {
+    const unit = ctx.units[id]
+    if (!unit) continue
+    for (const slotId of assignment.slotIds) {
+      const si = ctx.slotIdx.get(slotId)
+      if (si == null) continue
+      const slot = ctx.slots[si]
+      if (unit.importance >= 4 && slot.segment !== 'morning') afternoon.push(id)
+      for (const teacherId of unit.teacherIds) {
+        const k = `${teacherId}:${slot.dayOfWeek}`
+        const value = teacherDays.get(k) ?? { unitIds: new Set<number>(), periods: [] }
+        value.unitIds.add(id)
+        value.periods.push(slot.periodIndex)
+        teacherDays.set(k, value)
+      }
+    }
+  }
+  let worst: { gap: number; ids: Set<number> } = { gap: 0, ids: new Set() }
+  for (const value of teacherDays.values()) {
+    const periods = [...value.periods].sort((a, b) => a - b)
+    const gap =
+      periods.length > 1 ? periods[periods.length - 1] - periods[0] + 1 - new Set(periods).size : 0
+    if (gap > worst.gap) worst = { gap, ids: value.unitIds }
+  }
+  return [...new Set([...worst.ids, ...afternoon])]
+}
+
 function candidateMove(ctx: SolverContext, current: Solution, rng: Rng) {
   const ids = [...current.assignments.keys()]
   if (ids.length < 1) return undefined
-  if (ids.length > 1 && rng.next() < 0.35) {
-    const a = randomItem(ids, rng)!
+  const targeted = targetedIds(ctx, current)
+  const pool = targeted.length > 0 && rng.next() < 0.75 ? targeted : ids
+  if (pool.length > 1 && rng.next() < 0.35) {
+    const a = randomItem(pool, rng)!
     let b = randomItem(ids, rng)!
     while (b === a) b = randomItem(ids, rng)!
     return swap(current, a, b)
   }
-  const id = randomItem(ids, rng)!
+  const id = randomItem(pool, rng)!
   const unit = ctx.units[id]
   const windows = ctx.domains[id]
     .map((wid) => ctx.windows[wid])
