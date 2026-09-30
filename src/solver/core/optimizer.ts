@@ -6,7 +6,7 @@ import { verifyHardConstraints } from './verify'
 import { createRng, type Rng } from './random'
 import { scoreSolution } from './scorer'
 import { measureQuality } from './qualityMetrics'
-import { move, swap } from './moves'
+import { move, ruinRecreate, swap } from './moves'
 
 export interface OptimizeOptions {
   seed?: number
@@ -78,15 +78,75 @@ function targetedIds(ctx: SolverContext, current: Solution): number[] {
   return [...new Set([...worst.ids, ...afternoon])]
 }
 
+function teacherDayRecreate(ctx: SolverContext, current: Solution, rng: Rng) {
+  const days = new Map<string, { ids: Set<number>; periods: number[] }>()
+  for (const [id, assignment] of current.assignments) {
+    const unit = ctx.units[id]
+    for (const slotId of assignment.slotIds) {
+      const si = ctx.slotIdx.get(slotId)
+      if (si == null) continue
+      for (const teacherId of unit.teacherIds) {
+        const key = `${teacherId}:${ctx.slots[si].dayOfWeek}`
+        const value = days.get(key) ?? { ids: new Set<number>(), periods: [] }
+        value.ids.add(id)
+        value.periods.push(ctx.slots[si].periodIndex)
+        days.set(key, value)
+      }
+    }
+  }
+  let worst: { ids: number[]; gap: number } = { ids: [], gap: 0 }
+  for (const value of days.values()) {
+    const periods = [...value.periods].sort((a, b) => a - b)
+    const gap =
+      periods.length > 1 ? periods[periods.length - 1] - periods[0] + 1 - new Set(periods).size : 0
+    if (gap > worst.gap) worst = { ids: [...value.ids], gap }
+  }
+  if (worst.ids.length === 0) return undefined
+  const ids = worst.ids.slice(0, 12)
+  const removed = new Set(ids)
+  const occupied = new Set<number>()
+  for (const [id, assignment] of current.assignments) {
+    if (!removed.has(id)) for (const slotId of assignment.slotIds) occupied.add(slotId)
+  }
+  const replacement = new Map<number, NonNullable<ReturnType<typeof current.assignments.get>>>()
+  for (const id of rng.shuffle(ids)) {
+    const old = current.assignments.get(id)
+    const unit = ctx.units[id]
+    if (!old || !unit) continue
+    const candidates = rng.shuffle(
+      ctx.domains[id].map((wid) => ctx.windows[wid]).filter((w) => w.length === unit.size)
+    )
+    const target = candidates.find((window) =>
+      window.every((si) => !occupied.has(ctx.slots[si].id))
+    )
+    if (!target) continue
+    const slotIds = target.map((si) => ctx.slots[si].id)
+    replacement.set(id, { ...old, slotId: slotIds[0], slotIds, roomIds: [...old.roomIds] })
+    for (const slotId of slotIds) occupied.add(slotId)
+  }
+  return replacement.size ? ruinRecreate(current, ids, replacement) : undefined
+}
+
 function candidateMove(ctx: SolverContext, current: Solution, rng: Rng) {
   const ids = [...current.assignments.keys()]
   if (ids.length < 1) return undefined
+  if (rng.next() < 0.3) {
+    const recreated = teacherDayRecreate(ctx, current, rng)
+    if (recreated) return recreated
+  }
   const targeted = targetedIds(ctx, current)
   const pool = targeted.length > 0 && rng.next() < 0.75 ? targeted : ids
   if (pool.length > 1 && rng.next() < 0.35) {
     const a = randomItem(pool, rng)!
-    let b = randomItem(ids, rng)!
-    while (b === a) b = randomItem(ids, rng)!
+    const morning = ids.filter((id) =>
+      current.assignments.get(id)?.slotIds.some((slotId) => {
+        const si = ctx.slotIdx.get(slotId)
+        return si != null && ctx.slots[si].segment === 'morning'
+      })
+    )
+    const choices = ctx.units[a].importance >= 4 && morning.length ? morning : ids
+    let b = randomItem(choices, rng)!
+    while (b === a && choices.length > 1) b = randomItem(choices, rng)!
     return swap(current, a, b)
   }
   const id = randomItem(pool, rng)!
