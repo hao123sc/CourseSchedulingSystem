@@ -36,6 +36,8 @@ export interface ScoreResult {
 }
 
 export interface ScoreCache {
+  /** 每个单元的明细点，增量更新时只移除/重建受影响单元。 */
+  unitPoints: Map<number, LessonPoint[]>
   classDay: Map<string, number>
   teacherDay: Map<string, number>
   subjectDay: Map<string, number>
@@ -114,8 +116,12 @@ function collect(
   ctx: SolverContext,
   solution: Solution
 ): { points: LessonPoint[]; cache: ScoreCache } {
-  const points = [...solution.assignments].flatMap(([id, a]) => assignmentPoints(ctx, id, a))
+  const unitPoints = new Map<number, LessonPoint[]>()
+  for (const [id, assignment] of solution.assignments)
+    unitPoints.set(id, assignmentPoints(ctx, id, assignment))
+  const points = [...unitPoints.values()].flat()
   const cache: ScoreCache = {
+    unitPoints,
     classDay: new Map(),
     teacherDay: new Map(),
     subjectDay: new Map(),
@@ -276,9 +282,57 @@ export function scoreSolution(
   return { total, breakdown, metrics }
 }
 
-/** 构建可供 Move 复用的三类增量缓存；当前实现重建索引，接口保持稳定。 */
+function adjust(map: Map<string, number>, item: string, delta: number): void {
+  const next = (map.get(item) ?? 0) + delta
+  if (next === 0) map.delete(item)
+  else map.set(item, next)
+}
+
+function applyPoint(cache: ScoreCache, point: LessonPoint, delta: number): void {
+  adjust(cache.classDay, key(point.classId, point.day), delta)
+  if (point.teacherId != null) {
+    adjust(cache.teacherDay, key(point.teacherId, point.day), delta)
+    const slotKey = key(point.teacherId, point.day)
+    const slots = cache.teacherDaySlots.get(slotKey) ?? []
+    if (delta > 0) slots.push(point.period)
+    else {
+      const index = slots.indexOf(point.period)
+      if (index >= 0) slots.splice(index, 1)
+    }
+    if (slots.length) cache.teacherDaySlots.set(slotKey, slots)
+    else cache.teacherDaySlots.delete(slotKey)
+  }
+  adjust(cache.subjectDay, key(point.classId, point.subjectId, point.day), delta)
+  adjust(cache.classSubjectDay, key(point.classId, point.subjectId, point.day), delta)
+  if (point.roomId != null) {
+    adjust(cache.roomSlot, key(point.roomId, point.slotIdx), delta)
+    const next = (cache.roomUse.get(point.roomId) ?? 0) + delta
+    if (next === 0) cache.roomUse.delete(point.roomId)
+    else cache.roomUse.set(point.roomId, next)
+  }
+}
+
+/** 构建可供 Move 复用的增量缓存。 */
 export function buildScoreCache(ctx: SolverContext, solution: Solution): ScoreCache {
   return collect(ctx, solution).cache
+}
+
+/** 只刷新发生变化的单元，不扫描其余 assignments。 */
+export function updateScoreCache(
+  ctx: SolverContext,
+  solution: Solution,
+  cache: ScoreCache,
+  changedUnitIds: readonly number[]
+): ScoreCache {
+  for (const unitId of new Set(changedUnitIds)) {
+    for (const point of cache.unitPoints.get(unitId) ?? []) applyPoint(cache, point, -1)
+    const assignment = solution.assignments.get(unitId)
+    const next = assignment ? assignmentPoints(ctx, unitId, assignment) : []
+    for (const point of next) applyPoint(cache, point, 1)
+    if (next.length) cache.unitPoints.set(unitId, next)
+    else cache.unitPoints.delete(unitId)
+  }
+  return cache
 }
 
 /** 仅为增量接口保留的统一入口，保证后续算子无需知道缓存实现细节。 */

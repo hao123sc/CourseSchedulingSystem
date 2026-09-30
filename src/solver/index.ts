@@ -29,5 +29,11 @@ export { optimizeQuality } from './core/optimizer'
 export type { OptimizeOptions, OptimizeResult } from './core/optimizer'
 export { measureQuality, assertQualityMetrics } from './core/qualityMetrics'
 export type { QualityMetrics } from './core/qualityMetrics'
-export { scoreSolution, buildScoreCache, deltaScore, SOFT_CODES } from './core/scorer'
+export {
+  scoreSolution,
+  buildScoreCache,
+  updateScoreCache,
+  deltaScore,
+  SOFT_CODES
+} from './core/scorer'
 export type { ScoreResult, ScoreCache, ScoreBreakdown, SoftCode } from './core/scorer'
