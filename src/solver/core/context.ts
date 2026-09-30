@@ -16,6 +16,7 @@ import type { RuleValue, WeekMode } from '@shared/domain'
 import type { SolverInput, SolverSlot } from '../model/types'
 import { WEEK_MASK, type Unit, type UnitRoomOption } from '../model/solution'
 import { Occupancy } from './occupancy'
+import { buildSlotNeighbors } from './adjacency'
 
 export interface SolverContext {
   input: SolverInput
@@ -44,6 +45,13 @@ export interface SolverContext {
   windows: number[][]
   /** `stageId:size` → 窗口 id 列表 */
   windowsByStageSize: Map<string, number[]>
+
+  /**
+   * 相邻教学槽（同日同分段、periodIndex 逐节递增，与连堂窗口同一套口径），
+   * 「事实连堂」判定用（core/adjacency.ts）；没有相邻槽时为 -1。
+   */
+  slotPrev: Int32Array
+  slotNext: Int32Array
 
   units: Unit[]
   /** unitId → 可用窗口 id 列表（AC-3 之前的初始值域） */
@@ -411,6 +419,8 @@ export function buildContext(input: SolverInput): SolverContext {
     if (c.homeRoomId != null && roomIdx.has(c.homeRoomId)) homeRoomOf.set(c.id, c.homeRoomId)
   }
 
+  const { prev: slotPrev, next: slotNext } = buildSlotNeighbors(slots)
+
   return {
     input,
     slots,
@@ -425,6 +435,8 @@ export function buildContext(input: SolverInput): SolverContext {
     roomSeats,
     windows,
     windowsByStageSize,
+    slotPrev,
+    slotNext,
     units,
     domains,
     base,

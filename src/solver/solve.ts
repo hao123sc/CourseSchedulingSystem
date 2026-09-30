@@ -18,6 +18,7 @@ import { construct } from './core/dsatur'
 import { minConflictsRepair } from './core/minConflicts'
 import { verifyHardConstraints } from './core/verify'
 import { createRng } from './core/random'
+import { countAccidentalBlocks } from './core/adjacency'
 import type { Diagnosis } from './core/diagnosis'
 
 export type SolvePhase = 'preprocess' | 'construct' | 'repair' | 'verify' | 'done'
@@ -66,6 +67,8 @@ export interface SolveResult {
     starts: number
     elapsedMs: number
     prunedByAc3: number
+    /** 事实连堂对数：未配置连堂却同班同学科相邻的课（越少越好，目标 0） */
+    accidentalBlocks: number
   }
 }
 
@@ -139,7 +142,8 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
       fixedPeriods,
       starts,
       elapsedMs: now() - started,
-      prunedByAc3: pruned.removed
+      prunedByAc3: pruned.removed,
+      accidentalBlocks: countAccidentalBlocks(ctx, sol)
     }
   })
 
@@ -149,7 +153,13 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
   }
 
   // ── 阶段 1：构造（多起点取优）────────────────────────────────────
-  let best: { sol: Solution; unplaced: number[]; violations: HardViolation[] } | null = null
+  // 择优次序：未排 > 硬违反 > 事实连堂（前两者归零后，才用连堂对数比起优劣）
+  let best: {
+    sol: Solution
+    unplaced: number[]
+    violations: HardViolation[]
+    accidental: number
+  } | null = null
   for (let k = 0; k < starts; k++) {
     if (options.cancelled?.()) break
     const seed = baseSeed + k * 7919
@@ -178,10 +188,13 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
 
     const sol = board.toSolution(seed, rest)
     const violations = verifyHardConstraints(ctx, sol, { studentGroups: options.studentGroups })
-    const score = rest.length * 1000 + violations.length
-    const bestScore = best ? best.unplaced.length * 1000 + best.violations.length : Infinity
-    if (score < bestScore) best = { sol, unplaced: rest, violations }
-    if (rest.length === 0 && violations.length === 0) break
+    const accidental = countAccidentalBlocks(ctx, sol)
+    const score = rest.length * 1000 + violations.length * 100 + accidental
+    const bestScore = best
+      ? best.unplaced.length * 1000 + best.violations.length * 100 + best.accidental
+      : Infinity
+    if (score < bestScore) best = { sol, unplaced: rest, violations, accidental }
+    if (rest.length === 0 && violations.length === 0 && accidental === 0) break
     if (now() - started > budget) break
   }
 

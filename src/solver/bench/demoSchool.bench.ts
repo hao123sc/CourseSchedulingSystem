@@ -74,6 +74,7 @@ function report(label: string, input: SolverInput): void {
       `  课时单元 ${r.stats.units} 个 / 待排 ${r.stats.periods} 节 / 预排锁定 ${r.stats.fixedPeriods} 节`,
       `  AC-3 剔除候选 ${r.stats.prunedByAc3} 个`,
       `  状态 ${r.status} · 未排 ${r.unplaced.length} 节 · 硬约束违反 ${violations.length} ${JSON.stringify(byCode)}`,
+      `  事实连堂 ${r.stats.accidentalBlocks} 对（未配置连堂却同学科相邻）`,
       `  实测耗时 ${elapsed} ms`,
       r.diagnostics.length > 0 ? `  诊断 ${r.diagnostics.slice(0, 3).map((d) => d.title).join(' | ')}` : ''
     ].join('\n')
@@ -82,6 +83,8 @@ function report(label: string, input: SolverInput): void {
   expect(violations).toEqual([])
   expect(r.unplaced).toEqual([])
   expect(r.status).toBe('solved')
+  // 2026-09-30 用户要求：未配置连堂的课不得出现同学科相邻（事实连堂目标 0）
+  expect(r.stats.accidentalBlocks).toBe(0)
 }
 
 /** 只保留指定学段的切片，用来单独测 60 班规模 */

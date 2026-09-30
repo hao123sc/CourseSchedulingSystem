@@ -29,6 +29,15 @@ export class Board {
   readonly unitsBySlot: Set<number>[]
   private readonly windowOf = new Map<number, number>()
 
+  /**
+   * 「班 × 槽 → 学科」两张单双周平面（[ci * S + si]），-1 = 空。
+   * **不是硬约束状态**，只服务「事实连堂」强偏好（core/adjacency.ts）：
+   * 放置时看窗口两端的邻居槽是否已是同学科，是则加罚分。
+   * 预排锁定的课（kind='lesson' 且带学科）一开始就压进来，剩余课时会主动避开它。
+   */
+  private readonly subjOdd: Int32Array
+  private readonly subjEven: Int32Array
+
   constructor(readonly ctx: SolverContext) {
     this.occ = new Occupancy({
       classes: ctx.input.classes.length,
@@ -43,6 +52,40 @@ export class Board {
     this.occ.rooms.odd.set(ctx.base.rooms.odd)
     this.occ.rooms.even.set(ctx.base.rooms.even)
     this.unitsBySlot = ctx.slots.map(() => new Set<number>())
+
+    const S = ctx.slots.length
+    this.subjOdd = new Int32Array(ctx.input.classes.length * S).fill(-1)
+    this.subjEven = new Int32Array(ctx.input.classes.length * S).fill(-1)
+    for (const fp of ctx.fixedPlacements) {
+      if (fp.subjectId == null) continue
+      const ci = ctx.classIdx.get(fp.classId)
+      const si = ctx.slotIdx.get(fp.slotId)
+      if (ci == null || si == null) continue
+      this.subjOdd[ci * S + si] = fp.subjectId
+      this.subjEven[ci * S + si] = fp.subjectId
+    }
+  }
+
+  /**
+   * 把 u 放到 slotIds 上会与多少节「同班同学科」的课**挨着**（事实连堂接触数）。
+   * 只查窗口首槽的前一个 / 末槽的后一个邻居——窗口内部（显式连堂块）不算。
+   * 单双周按周掩码交集判定：奇偶错开的两节课在任何一周都不会真的挨着。
+   */
+  sameSubjectContacts(u: Unit, slotIds: number[]): number {
+    if (slotIds.length === 0) return 0
+    const S = this.ctx.slots.length
+    const edges = [this.ctx.slotPrev[slotIds[0]], this.ctx.slotNext[slotIds[slotIds.length - 1]]]
+    let n = 0
+    for (const e of edges) {
+      if (e < 0) continue
+      for (const c of u.classIds) {
+        const ci = this.ctx.classIdx.get(c)
+        if (ci == null) continue
+        if (u.weekMask & 0b01 && this.subjOdd[ci * S + e] === u.subjectId) n += 1
+        if (u.weekMask & 0b10 && this.subjEven[ci * S + e] === u.subjectId) n += 1
+      }
+    }
+    return n
   }
 
   /** 某个班在某场地要占的班位数（拼合组里每个班各占各的，不相加） */
@@ -140,6 +183,7 @@ export class Board {
 
   place(u: Unit, windowId: number, roomIds: (number | null)[]): void {
     const slotIds = this.ctx.windows[windowId]
+    const S = this.ctx.slots.length
     for (const si of slotIds) {
       for (const c of u.classIds) {
         const ci = this.ctx.classIdx.get(c)
@@ -156,6 +200,13 @@ export class Board {
         if (ri != null) this.occ.rooms.occupy(ri, si, u.weekMask, this.slotsTakenOn(u, roomId))
       }
       this.unitsBySlot[si].add(u.id)
+      // 事实连堂平面（仅偏好判定用，非硬约束状态）
+      for (const c of u.classIds) {
+        const ci = this.ctx.classIdx.get(c)
+        if (ci == null) continue
+        if (u.weekMask & 0b01) this.subjOdd[ci * S + si] = u.subjectId
+        if (u.weekMask & 0b10) this.subjEven[ci * S + si] = u.subjectId
+      }
     }
     this.assignments.set(u.id, {
       unitId: u.id,
@@ -172,6 +223,7 @@ export class Board {
     const windowId = this.windowOf.get(unitId)
     if (!a || windowId == null) return
     const u = this.ctx.units[unitId]
+    const S = this.ctx.slots.length
     for (const si of this.ctx.windows[windowId]) {
       for (const c of u.classIds) {
         const ci = this.ctx.classIdx.get(c)
@@ -188,6 +240,12 @@ export class Board {
         if (ri != null) this.occ.rooms.release(ri, si, u.weekMask, this.slotsTakenOn(u, roomId))
       }
       this.unitsBySlot[si].delete(unitId)
+      for (const c of u.classIds) {
+        const ci = this.ctx.classIdx.get(c)
+        if (ci == null) continue
+        if (u.weekMask & 0b01) this.subjOdd[ci * S + si] = -1
+        if (u.weekMask & 0b10) this.subjEven[ci * S + si] = -1
+      }
     }
     this.assignments.delete(unitId)
     this.windowOf.delete(unitId)

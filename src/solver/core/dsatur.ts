@@ -142,6 +142,9 @@ export function construct(
       if (!probe.ok) continue
       let score = 0
       for (const si of ctx.windows[wid]) score += slotDemand[si]
+      // 事实连堂罚分（2026-09-30 用户要求）：没配置连堂的课绝不与同班同学科挨着，
+      // 除非整个值域只剩挨着的落点。1000/次的量级远超 slotDemand，保证优先级。
+      score += board.sameSubjectContacts(u, ctx.windows[wid]) * 1000
       score = score * 0.6 + rng.next() // 同分随机打散 → 多起点能产生不同解
       if (best == null || score < best.score) best = { wid, roomIds: probe.roomIds, score }
     }

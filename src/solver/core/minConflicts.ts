@@ -50,28 +50,37 @@ export function minConflictsRepair(
     const unitId = queue.shift()!
     const u = ctx.units[unitId]
 
-    // 1) 先试直接放
-    let placed = false
+    // 1) 先试直接放：可行的落点里挑「事实连堂」接触最少的（有得选就绝不挨着）
+    let direct: { wid: number; roomIds: (number | null)[]; contacts: number } | null = null
     for (const wid of rng.shuffle(domains[unitId])) {
       const probe = board.canPlace(u, wid)
-      if (probe.ok) {
-        board.place(u, wid, probe.roomIds)
-        placed = true
-        break
+      if (!probe.ok) continue
+      const contacts = board.sameSubjectContacts(u, ctx.windows[wid])
+      if (direct == null || contacts < direct.contacts) {
+        direct = { wid, roomIds: probe.roomIds, contacts }
+        if (contacts === 0) break
       }
     }
-    if (placed) {
+    if (direct) {
+      board.place(u, direct.wid, direct.roomIds)
       opts.onProgress?.(total - queue.length, total)
       continue
     }
 
-    // 2) 找"顶掉的课最少"的窗口
-    let best: { wid: number; victims: number[] } | null = null
+    // 2) 找"顶掉的课最少"的窗口（同为最少时挑事实连堂接触也最少的）
+    let best: { wid: number; victims: number[]; contacts: number } | null = null
     for (const wid of domains[unitId]) {
       const victims = board.blockers(u, wid).filter((v) => evictions[v] < 8)
       if (victims.length === 0) continue // 顶不动（阻塞来自预排锁定 H7）
-      if (best == null || victims.length < best.victims.length) best = { wid, victims }
-      if (best.victims.length === 1) break
+      const contacts = board.sameSubjectContacts(u, ctx.windows[wid])
+      if (
+        best == null ||
+        victims.length < best.victims.length ||
+        (victims.length === best.victims.length && contacts < best.contacts)
+      ) {
+        best = { wid, victims, contacts }
+      }
+      if (best.victims.length === 1 && best.contacts === 0) break
     }
     if (!best) {
       queue.push(unitId)
