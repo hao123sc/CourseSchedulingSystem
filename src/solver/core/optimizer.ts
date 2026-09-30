@@ -104,27 +104,63 @@ function teacherDayRecreate(ctx: SolverContext, current: Solution, rng: Rng) {
   if (worst.ids.length === 0) return undefined
   const ids = worst.ids.slice(0, 12)
   const removed = new Set(ids)
-  const occupied = new Set<number>()
+  const blocked = new Set<string>()
   for (const [id, assignment] of current.assignments) {
-    if (!removed.has(id)) for (const slotId of assignment.slotIds) occupied.add(slotId)
+    if (removed.has(id)) continue
+    const unit = ctx.units[id]
+    for (const slotId of assignment.slotIds) {
+      for (const classId of unit.classIds) blocked.add(`c:${classId}:${slotId}`)
+      for (const teacherId of unit.teacherIds) blocked.add(`t:${teacherId}:${slotId}`)
+    }
   }
   const replacement = new Map<number, NonNullable<ReturnType<typeof current.assignments.get>>>()
-  for (const id of rng.shuffle(ids)) {
+  const pending = new Set<number>()
+  const remaining = new Set(ids)
+  // Regret repair：每轮优先处理可行候选最少的单元，
+  // 然后选择能减少日内跨度、且主课优先上午的候选窗口。
+  while (remaining.size) {
+    let selected: { id: number; candidates: number[][] } | undefined
+    for (const id of remaining) {
+      const unit = ctx.units[id]
+      const candidates = ctx.domains[id]
+        .map((wid) => ctx.windows[wid])
+        .filter(
+          (window) =>
+            window.length === unit.size &&
+            window.every((si) => {
+              const slotId = ctx.slots[si].id
+              return (
+                !window.some((sj) => pending.has(sj)) &&
+                unit.classIds.every((classId) => !blocked.has(`c:${classId}:${slotId}`)) &&
+                unit.teacherIds.every((teacherId) => !blocked.has(`t:${teacherId}:${slotId}`))
+              )
+            })
+        )
+      if (!selected || candidates.length < selected.candidates.length) selected = { id, candidates }
+    }
+    if (!selected || selected.candidates.length === 0) break
+    const id = selected.id
     const old = current.assignments.get(id)
     const unit = ctx.units[id]
-    if (!old || !unit) continue
-    const candidates = rng.shuffle(
-      ctx.domains[id].map((wid) => ctx.windows[wid]).filter((w) => w.length === unit.size)
-    )
-    const target = candidates.find((window) =>
-      window.every((si) => !occupied.has(ctx.slots[si].id))
-    )
-    if (!target) continue
+    if (!old) break
+    const ordered = rng.shuffle(selected.candidates).sort((a, b) => {
+      const aMorning =
+        unit.importance >= 4 ? a.filter((si) => ctx.slots[si].segment === 'morning').length : 0
+      const bMorning =
+        unit.importance >= 4 ? b.filter((si) => ctx.slots[si].segment === 'morning').length : 0
+      return bMorning - aMorning
+    })
+    const target = ordered[0]
     const slotIds = target.map((si) => ctx.slots[si].id)
     replacement.set(id, { ...old, slotId: slotIds[0], slotIds, roomIds: [...old.roomIds] })
-    for (const slotId of slotIds) occupied.add(slotId)
+    for (const si of target) pending.add(si)
+    for (const slotId of slotIds) {
+      for (const classId of unit.classIds) blocked.add(`c:${classId}:${slotId}`)
+      for (const teacherId of unit.teacherIds) blocked.add(`t:${teacherId}:${slotId}`)
+    }
+    remaining.delete(id)
   }
-  return replacement.size ? ruinRecreate(current, ids, replacement) : undefined
+  return replacement.size === ids.length ? ruinRecreate(current, ids, replacement) : undefined
 }
 
 function candidateMove(ctx: SolverContext, current: Solution, rng: Rng) {
