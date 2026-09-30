@@ -18,9 +18,9 @@ import type {
 } from './types/entities'
 
 const mockSubjects: Subject[] = [
-  { id: 1, name: '语文', shortName: '语', color: '#ef4444', isPractical: false, defaultRoomType: null, sortOrder: 1 },
-  { id: 2, name: '数学', shortName: '数', color: '#3b82f6', isPractical: false, defaultRoomType: null, sortOrder: 2 },
-  { id: 3, name: '体育', shortName: '体', color: '#10b981', isPractical: true, defaultRoomType: 'field', sortOrder: 3 }
+  { id: 1, name: '语文', shortName: '语', color: '#ef4444', category: 'main', importance: 1, needSpecialRoom: false, stageId: 2, dailyMax: 2, weekSpread: 'spread', sortOrder: 1 },
+  { id: 2, name: '数学', shortName: '数', color: '#3b82f6', category: 'main', importance: 1, needSpecialRoom: false, stageId: 2, dailyMax: 2, weekSpread: 'spread', sortOrder: 2 },
+  { id: 3, name: '体育', shortName: '体', color: '#10b981', category: 'minor', importance: 2, needSpecialRoom: true, stageId: 2, dailyMax: 1, weekSpread: 'spread', sortOrder: 3 }
 ]
 
 const mockTeachers: Teacher[] = [
@@ -30,17 +30,17 @@ const mockTeachers: Teacher[] = [
 ]
 
 const mockClassrooms: Classroom[] = [
-  { id: 201, name: '101教室', roomType: 'regular', capacity: 50, concurrentCapacity: 1, building: '教学楼', floor: 1, enabled: true },
-  { id: 202, name: '田径场', roomType: 'field', capacity: 200, concurrentCapacity: 4, building: '操场', floor: 1, enabled: true }
+  { id: 201, name: '101教室', roomType: 'normal', capacity: 50, concurrentCapacity: 1, building: '教学楼', enabled: true },
+  { id: 202, name: '田径场', roomType: 'sports', capacity: 200, concurrentCapacity: 4, building: '操场', enabled: true }
 ]
 
 const mockGrades: Grade[] = [
-  { id: 10, semesterId: 1, stageId: 2, name: '初一', code: 'G7', sortOrder: 1 }
+  { id: 10, semesterId: 1, stageId: 2, name: '初一', enrollYear: 2026, sortOrder: 1 }
 ]
 
 const mockClasses: Klass[] = [
-  { id: 301, gradeId: 10, name: '初一(1)班', shortName: '初一1', studentCount: 45, homeRoomId: 201, headTeacherId: 101, sortOrder: 1 },
-  { id: 302, gradeId: 10, name: '初一(2)班', shortName: '初一2', studentCount: 45, homeRoomId: null, headTeacherId: 102, sortOrder: 2 }
+  { id: 301, gradeId: 10, name: '初一(1)班', shortName: '初一1', studentCount: 45, isVirtual: false, homeRoomId: 201, headTeacherId: 101, sortOrder: 1 },
+  { id: 302, gradeId: 10, name: '初一(2)班', shortName: '初一2', studentCount: 45, isVirtual: false, homeRoomId: null, headTeacherId: 102, sortOrder: 2 }
 ]
 
 const mockSlots: TimeSlot[] = [
@@ -168,9 +168,9 @@ describe('timetableExport · Pure functions and formatting', () => {
 
       const mockFixed: FixedLesson[] = [
         // 周一 第4节 晚自习（纯占位，无学科）
-        { id: 10, semesterId: 1, stageId: 2, gradeId: 10, classId: 301, teacherId: null, classroomId: null, subjectId: null, slotId: 4, weekMode: 'all', kind: 'lesson', label: '晚自习' },
+        { id: 10, semesterId: 1, gradeId: 10, classId: 301, teacherId: null, classroomId: null, subjectId: null, slotId: 4, kind: 'lesson', label: '晚自习' },
         // 周二 第1节 已物化的数学（应该被去重，不重复渲染）
-        { id: 11, semesterId: 1, stageId: 2, gradeId: 10, classId: 301, teacherId: 102, classroomId: 201, subjectId: 2, slotId: 5, weekMode: 'all', kind: 'lesson', label: null }
+        { id: 11, semesterId: 1, gradeId: 10, classId: 301, teacherId: 102, classroomId: 201, subjectId: 2, slotId: 5, kind: 'lesson', label: null }
       ]
 
       const sheet = buildSingleTimetableExportSheet({
@@ -278,7 +278,7 @@ describe('timetableExport · Pure functions and formatting', () => {
       ]
 
       const mockFixed: FixedLesson[] = [
-        { id: 10, semesterId: 1, stageId: 2, gradeId: 10, classId: null, teacherId: null, classroomId: null, subjectId: null, slotId: 4, weekMode: 'all', kind: 'lesson', label: '晚自习' }
+        { id: 10, semesterId: 1, gradeId: 10, classId: null, teacherId: null, classroomId: null, subjectId: null, slotId: 4, kind: 'lesson', label: '晚自习' }
       ]
 
       const overview = buildOverviewExportSheet({

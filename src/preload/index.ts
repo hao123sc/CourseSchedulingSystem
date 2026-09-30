@@ -127,10 +127,11 @@ const zhikepaiApi: {
   'schedule:cancel': () => ipcRenderer.invoke('schedule:cancel'),
   'schedule:isRunning': () => ipcRenderer.invoke('schedule:isRunning'),
 
-  // ---- 课表（M4） ----
+  // ---- 课表（M4/M7） ----
   'timetable:versionLessons': (versionId) =>
     ipcRenderer.invoke('timetable:versionLessons', versionId),
   'timetable:moveLesson': (payload) => ipcRenderer.invoke('timetable:moveLesson', payload),
+  'timetable:exportExcel': (params) => ipcRenderer.invoke('timetable:exportExcel', params),
 
   // ---- 事件订阅（Main → Renderer） ----
   onScheduleEvent: (cb) => {

@@ -12,6 +12,7 @@ import base from './vitest.config'
  * 有原生模块的机器请优先用 `npm test`：那条路径与生产环境完全一致。
  */
 const driver = resolve(__dirname, 'scripts/test/node-sqlite-driver.cjs')
+const electronStub = resolve(__dirname, 'scripts/test/electron-stub.cjs')
 
 console.log(
   '[test:sqlite] sqlite 驱动已替换为 Node 内置 node:sqlite（仅测试环境，产品代码不受影响）'
@@ -21,8 +22,11 @@ export default mergeConfig(
   base,
   defineConfig({
     resolve: {
-      // 产品代码里的 import Database from 'better-sqlite3'
-      alias: { 'better-sqlite3': driver }
+      // 产品代码里的 import Database from 'better-sqlite3' 与 Electron 桩
+      alias: {
+        'better-sqlite3': driver,
+        electron: electronStub
+      }
     },
     test: {
       // 测试文件里的 createRequire(...)('better-sqlite3') 原生模块探针

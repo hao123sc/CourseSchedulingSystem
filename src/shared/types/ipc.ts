@@ -218,9 +218,25 @@ export interface IpcApi {
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8 占位） ----
   'timetable:versionLessons': (versionId: number) => Lesson[]
   'timetable:moveLesson': (payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) => Lesson
+  'timetable:exportExcel': (params: TimetableExportParams) => ExcelExportResult
   // 'report:health': (versionId: number) => unknown
-  // 'export:excel': (p: unknown) => { filePath: string }
   // 'seed:load': (preset: 'primary' | 'junior' | 'senior') => void
+}
+
+export type TimetableExportScope =
+  | 'current'
+  | 'all_classes'
+  | 'all_teachers'
+  | 'all_rooms'
+  | 'overview'
+
+export interface TimetableExportParams {
+  semesterId: number
+  versionId: number
+  stageId?: number | null
+  view: 'class' | 'teacher' | 'room' | 'overview'
+  targetId?: number | null
+  scope?: TimetableExportScope
 }
 
 export type IpcChannel = keyof IpcApi

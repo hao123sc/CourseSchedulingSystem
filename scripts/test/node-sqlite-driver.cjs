@@ -156,6 +156,26 @@ Database.default = Database
 module.exports = Database
 module.exports.default = Database
 
+const electronStub = {
+  dialog: {
+    showSaveDialog: async () => ({ canceled: true, filePath: null }),
+    showOpenDialog: async () => ({ canceled: true, filePaths: [] })
+  },
+  BrowserWindow: {
+    getFocusedWindow: () => null,
+    getAllWindows: () => []
+  },
+  app: {
+    getPath: () => '/tmp',
+    whenReady: () => Promise.resolve(),
+    exit: () => {}
+  },
+  ipcMain: {
+    handle: () => {},
+    on: () => {}
+  }
+}
+
 // 测试文件里的探针走 createRequire(...)('better-sqlite3')，Vite 的 alias 管不到，这里补上
 const Module = require('module')
 if (!Module.__zhikepaiSqliteShim) {
@@ -163,6 +183,7 @@ if (!Module.__zhikepaiSqliteShim) {
   const load = Module._load
   Module._load = function (request, ...rest) {
     if (request === 'better-sqlite3') return Database
+    if (request === 'electron') return electronStub
     return load.call(this, request, ...rest)
   }
 }
