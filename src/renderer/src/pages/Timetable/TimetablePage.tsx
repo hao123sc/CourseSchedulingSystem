@@ -16,6 +16,7 @@ import {
 } from './timetableModel'
 import { TimetableGrid } from '@renderer/components/timetable/TimetableGrid'
 import { OverviewSheet } from '@renderer/components/timetable/OverviewSheet'
+import { ExportDialog } from '@renderer/components/timetable/ExportDialog'
 
 /**
  * 课表页（M4 · docs/05 §4.5 + docs/mockups/timetable.html / overview.html 定稿）。
@@ -48,6 +49,7 @@ export function TimetablePage(): React.JSX.Element {
   const [selected, setSelected] = useState<GridLesson | null>(null)
   const [draggingLesson, setDraggingLesson] = useState<GridLesson | null>(null)
   const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const history = useRef(new AdjustmentHistory(50))
   const pendingRelatedJump = useRef<{ view: 'class' | 'teacher'; targetId: number; stageId: number | null } | null>(null)
 
@@ -479,7 +481,12 @@ export function TimetablePage(): React.JSX.Element {
         <Button size="sm" disabled={!history.current.canRedo} onClick={handleRedo} title="重做最近一次本地调整">
           ↷ 重做
         </Button>
-        <Button size="sm" disabled title="导出在 M7 开放">
+        <Button
+          size="sm"
+          onClick={() => setExportDialogOpen(true)}
+          disabled={versionId == null}
+          title="导出课表 (Excel)"
+        >
           ↥ 导出
         </Button>
       </div>
@@ -561,6 +568,7 @@ export function TimetablePage(): React.JSX.Element {
                   teachers={meta.teachers}
                   classrooms={meta.classrooms}
                   hardViolations={version?.hardViolations ?? 0}
+                  onExport={() => setExportDialogOpen(true)}
                 />
               </div>
             ) : (
@@ -620,6 +628,29 @@ export function TimetablePage(): React.JSX.Element {
           </aside>
         )}
       </div>
+
+      {semesterId != null && (
+        <ExportDialog
+          open={exportDialogOpen}
+          onClose={() => setExportDialogOpen(false)}
+          semesterId={semesterId}
+          versionId={versionId}
+          versionName={version?.name}
+          stageId={activeStageId}
+          stageName={meta.stages.find((s) => s.id === activeStageId)?.name}
+          view={view}
+          targetId={resolvedTargetId}
+          targetName={
+            view === 'class'
+              ? meta.classes.find((c) => c.id === resolvedTargetId)?.name
+              : view === 'teacher'
+                ? meta.teachers.find((t) => t.id === resolvedTargetId)?.name
+                : view === 'room'
+                  ? meta.classrooms.find((r) => r.id === resolvedTargetId)?.name
+                  : meta.stages.find((s) => s.id === activeStageId)?.name
+          }
+        />
+      )}
     </div>
   )
 }

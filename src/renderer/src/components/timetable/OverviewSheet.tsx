@@ -22,7 +22,8 @@ export function OverviewSheet({
   subjects,
   teachers,
   classrooms,
-  hardViolations
+  hardViolations,
+  onExport
 }: {
   classes: Klass[]
   grades: Grade[]
@@ -33,6 +34,7 @@ export function OverviewSheet({
   teachers: Teacher[]
   classrooms: Classroom[]
   hardViolations: number
+  onExport?: () => void
 }): React.JSX.Element {
   const [pct, setPct] = useState(100)
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -82,7 +84,7 @@ export function OverviewSheet({
           </Button>
         </div>
         <Button onClick={fit}>⤢ 适应宽度</Button>
-        <Button disabled title="M7 导出">
+        <Button onClick={onExport} title="导出全校总课表 (Excel)">
           ↥ 导出
         </Button>
       </div>
