@@ -179,7 +179,9 @@ export function solve(input: SolverInput, options: SolveOptions = {}): SolveResu
       start: k + 1,
       totalStarts: starts
     })
-    const { board, unplaced } = construct(ctx, pruned.domains, rng)
+    const { board, unplaced } = construct(ctx, pruned.domains, rng, {
+      softOptimize: options.qualityOptimize === true
+    })
 
     emit({
       phase: 'repair',

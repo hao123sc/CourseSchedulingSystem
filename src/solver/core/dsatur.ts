@@ -66,17 +66,28 @@ export function construct(
   ctx: SolverContext,
   domains: number[][],
   rng: Rng,
-  opts: { board?: Board } = {}
+  opts: { board?: Board; softOptimize?: boolean } = {}
 ): ConstructResult {
   const board = opts.board ?? new Board(ctx)
   const units = ctx.units
+  const softOptimize = opts.softOptimize ?? false
 
   // 还没排的单元对各时段的需求热度，用于 LCV
   const slotDemand = new Int32Array(ctx.slots.length)
-  for (const u of units) for (const wid of domains[u.id]) for (const si of ctx.windows[wid]) slotDemand[si] += 1
+  // 构造期的轻量软约束状态：让初始解已经倾向于均衡教师日负载、
+  // 分散同班同科，并把主课推向上午；M5 优化器再做全量精修。
+  const teacherDay = new Map<string, number>()
+  const teacherDayPeriods = new Map<string, number[]>()
+  const classSubjectDay = new Map<string, number>()
+  for (const u of units)
+    for (const wid of domains[u.id]) for (const si of ctx.windows[wid]) slotDemand[si] += 1
   const dropDemand = (unitId: number): void => {
     for (const wid of domains[unitId]) for (const si of ctx.windows[wid]) slotDemand[si] -= 1
   }
+  const dayOf = (si: number): number => ctx.slots[si].dayOfWeek
+  const teacherDayKey = (teacherId: number, day: number): string => `${teacherId}:${day}`
+  const classSubjectDayKey = (classId: number, subjectId: number, day: number): string =>
+    `${classId}:${subjectId}:${day}`
 
   const degree = new Int32Array(units.length)
   {
@@ -145,6 +156,34 @@ export function construct(
       // 事实连堂罚分（2026-09-30 用户要求）：没配置连堂的课绝不与同班同学科挨着，
       // 除非整个值域只剩挨着的落点。1000/次的量级远超 slotDemand，保证优先级。
       score += board.sameSubjectContacts(u, ctx.windows[wid]) * 1000
+      if (softOptimize) {
+        const days = new Set(ctx.windows[wid].map(dayOf))
+        for (const day of days) {
+          for (const teacherId of u.teacherIds) {
+            const teacherKey = teacherDayKey(teacherId, day)
+            const n = teacherDay.get(teacherKey) ?? 0
+            score += n * n * 18
+            const periods = [...(teacherDayPeriods.get(teacherKey) ?? [])]
+            for (const si of ctx.windows[wid]) {
+              if (dayOf(si) === day) periods.push(ctx.slots[si].periodIndex)
+            }
+            if (periods.length > 1) {
+              const min = Math.min(...periods)
+              const max = Math.max(...periods)
+              score += (max - min + 1 - new Set(periods).size) * 120
+            }
+          }
+          for (const classId of u.classIds) {
+            const n = classSubjectDay.get(classSubjectDayKey(classId, u.subjectId, day)) ?? 0
+            score += n * n * 60
+          }
+          if (
+            u.importance >= 4 &&
+            ctx.windows[wid].some((si) => dayOf(si) === day && ctx.slots[si].segment !== 'morning')
+          )
+            score += 100
+        }
+      }
       score = score * 0.6 + rng.next() // 同分随机打散 → 多起点能产生不同解
       if (best == null || score < best.score) best = { wid, roomIds: probe.roomIds, score }
     }
@@ -154,6 +193,22 @@ export function construct(
       continue
     }
     board.place(u, best.wid, best.roomIds)
+    if (softOptimize)
+      for (const day of new Set(ctx.windows[best.wid].map(dayOf))) {
+        for (const teacherId of u.teacherIds) {
+          const k = teacherDayKey(teacherId, day)
+          teacherDay.set(k, (teacherDay.get(k) ?? 0) + u.size)
+          const periods = teacherDayPeriods.get(k) ?? []
+          for (const si of ctx.windows[best.wid]) {
+            if (dayOf(si) === day) periods.push(ctx.slots[si].periodIndex)
+          }
+          teacherDayPeriods.set(k, periods)
+        }
+        for (const classId of u.classIds) {
+          const k = classSubjectDayKey(classId, u.subjectId, day)
+          classSubjectDay.set(k, (classSubjectDay.get(k) ?? 0) + u.size)
+        }
+      }
     dropDemand(u.id)
   }
 
