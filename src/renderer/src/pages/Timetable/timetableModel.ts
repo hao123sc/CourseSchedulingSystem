@@ -207,25 +207,41 @@ export function buildEntityGrid(
   // 班级视图：钉在本班 / 本年级的 lesson 类预排
   // 教师视图：占本教师的预排（lesson 或 block）
   // 教室视图：占本教室的预排（lesson 或 block，block 独占容量）
-  const lockedKeys = new Set(
-    lessons.filter((l) => l.isLocked).map((l) => `${l.classId}:${l.classroomId}:${l.slotId}`)
+  //
+  // 已物化的预排（带学科且该班有教学任务 → 排课落库为 isLocked 的 lesson 行，
+  // 见 scheduleResultService 第 2 步）只渲染 lesson 行那张卡，三个视图统一按
+  // 四元组（班:师:室:槽）判重——落库用的正是预排的师/室原值，能精确对上。
+  const lockedTuples = new Set(
+    lessons
+      .filter((l) => l.isLocked)
+      .map((l) => `${l.classId}:${l.teacherId}:${l.classroomId}:${l.slotId}`)
   )
+  const classesOfGrade = new Map<number, number[]>()
+  for (const c of meta.classes) {
+    const gid = gradeOfClass.get(c.id)
+    if (gid == null) continue
+    const arr = classesOfGrade.get(gid)
+    if (arr) arr.push(c.id)
+    else classesOfGrade.set(gid, [c.id])
+  }
+  /** 该预排是否已被物化成本版本的锁定课行（任一目标班命中即算） */
+  const isMaterialized = (f: FixedLesson): boolean => {
+    if (f.kind !== 'lesson') return false
+    const targets = f.classId != null ? [f.classId] : (classesOfGrade.get(f.gradeId ?? -1) ?? [])
+    return targets.some((c) => lockedTuples.has(`${c}:${f.teacherId}:${f.classroomId}:${f.slotId}`))
+  }
   for (const f of fixed) {
     if (!axis.rows.some((r) => r.slotId === f.slotId)) continue
+    if (isMaterialized(f)) continue
     if (view === 'class') {
       const hit =
         f.kind === 'lesson' &&
         (f.classId === targetId || (f.classId == null && f.gradeId === gradeOfClass.get(targetId)))
       if (!hit) continue
-      // 已被物化成本版本的锁定课 → 不重复显示
-      if (lockedKeys.has(`${targetId}:${f.classroomId ?? ''}:${f.slotId}`)) continue
     } else if (view === 'teacher') {
       if (f.teacherId !== targetId) continue
     } else {
       if (f.classroomId !== targetId) continue
-      if (f.kind === 'lesson' && lockedKeys.has(`${f.classId ?? ''}:${targetId}:${f.slotId}`)) {
-        continue
-      }
     }
 
     const subject = f.subjectId != null ? subjectById.get(f.subjectId) : undefined
