@@ -12,7 +12,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/base-data', label: '基础数据', icon: '📚', implemented: true },
   { path: '/teaching-matrix', label: '教学任务', icon: '📋', implemented: true },
   { path: '/rules', label: '排课规则', icon: '🔧', implemented: true },
-  { path: '/scheduling', label: '开始排课', icon: '▶️', implemented: false },
+  { path: '/scheduling', label: '开始排课', icon: '▶️', implemented: true },
   { path: '/timetable', label: '课表', icon: '📅', implemented: false },
   { path: '/report', label: '体检报告', icon: '📊', implemented: false },
   { path: '/export', label: '导出中心', icon: '📤', implemented: false },
