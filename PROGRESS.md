@@ -2,7 +2,7 @@
 
 > **本文件是项目状态的唯一事实来源（Single Source of Truth）。**
 > 每个会话开始时必须先读本文件；每个会话结束前必须更新本文件并提交。
-> 最后更新：2026-10-01 · **消除调课状态切换时课表垂直高度跳动，全面贯通两门课程双向对调（Swap）全链路，全系统 194 个测试全绿**。沙箱侧 typecheck / lint / `npm run test:sqlite` **194/194 全绿**，生产构建与引擎基准成功。
+> 最后更新：2026-10-01 · **修复体检报告跳转课表丢失目标实体缺陷，侧栏精准自动滚动高亮，全系统 195 个测试全绿**。沙箱侧 typecheck / lint / `npm run test:sqlite` **195/195 全绿**，生产构建与引擎基准成功。
 
 ---
 
@@ -136,6 +136,7 @@
 | 2026-10-01 | #26 | **课表调课/取消调课状态切换时中间课表宽度抖动 Bug 修复**。排查并修复用户提供的对比截图中“点击课程进入调课模式时右侧面板展开导致中间课表被挤压抖动移位”的体验缺陷。根因为右侧栏原使用未定义的 `w-68` 类导致无固定宽度，选中课程展示 Top 5 换课建议时右栏内容变宽向左挤压中间课表约 80px，使表格列坐标偏移导致连续点击容易错位。修复方案：将右侧统计/建议栏定死为 `w-80 shrink-0 overflow-y-auto overflow-x-hidden`（320px 恒定），并在 `SwapSuggestPanel` 中对长文本添加 `min-w-0`、`truncate` 和 `shrink-0`，确保无论是否处于调课或选中态，左侧 176px、右侧 320px、中间课表格子位置与列宽恒定静止不发生任何抖动移位。`test:sqlite` 192/192、typecheck、lint、build 全绿。 |
 | 2026-10-01 | #27 | **修复课表垂直跳动缺陷并全面贯通双向对调（Swap）全链路**。① **消除垂直跳动**：排查并彻底解决调课状态切换时课表上下跳动的缺陷。将原位于工具栏与课表主体之间的调课提示 banner 整体收敛至工具栏内部胶囊徽章（`flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50`），将调整通知收归全局浮层 toast，消除额外占据的整行垂直高度，实现调课/取消状态切换时课表垂直 (y) 与水平 (x) 坐标全固定。② **支持两门已有课程双向对调（Swap）**：排查并解决“调课时只能往空白课处调、无法与已有课程对调”的逻辑断点。在 `src/shared/adjustments.ts` 中新增 `detectSwapConflicts` 双向冲突检测算法，升级 `validAdjustmentTargets` 引入视图上下文（viewContext），使班级/教师/教室课表中所有满足双方教师、班级、场地及规则约束的已有课程时段一并高亮绿色；在 `scheduleResultService.ts` 与 IPC 中新增 `timetable:swapLessons` 原子事务对调接口与 `adjust_log` 审计记录；在 `TimetablePage.tsx` 中全面打通单击课表对调、拖拽对调、建议对调及 50 步撤销重做（Undo/Redo）。新增单测覆盖双向对调冲突与撤销重做，`npm run test:sqlite` **194/194 全绿**。 |
 | 2026-10-01 | #28 | **升级调课模式下可调/可对调课程的全局视觉高亮效果**。针对用户指出的“目前可调的课只有四个角绿色显示太不明显”的体验问题，在 `LessonCard.tsx`、`TimetableGrid.tsx` 与 `globals.css` 中进行了全局视觉重构：① **可对调课程卡片高亮 (`tt-droppable`)**：卡片自身获得 2px 翡翠绿实线边框（`#10b981`）+ 翡翠绿环境辉光 + 右上角明显的「`⇄ 对调`」实心绿色徽标，悬停时附带放大（`scale(1.04)`）与强辉光提升响应；② **可移入空白槽位高亮**：空白格子渲染为带 2px 虚线边框与浅绿背景的容器，居中显示「`➜ 移入`」操作提示；③ **冲突课程置底弱化 (`tt-disabled`)**：其余存在冲突的不可调课程卡片自动降低不透明度（`opacity: 0.38`）并附加 40% 灰度滤镜，使整个课表中的可调目标一目了然、对比极其鲜明。`npm run test:sqlite` 194/194、typecheck、lint、build 全绿。 |
+| 2026-10-01 | #29 | **体检报告跨页跳转课表目标丢失缺陷修复与侧栏精准定位**。排查并修复用户反馈的“在体检报告优化建议列表中点击查看课表（如高静老师）时跳转后停留在默认第一位老师李伟”的问题。根因：`TimetablePage.tsx` 中 `useEffect([view])` 在监听到视图切换时，在 else 分支中强制执行了 `setTargetId(null)`，将 URL 传入的目标 ID 冲掉并回退到默认首位教师；此外版本异步加载与元数据加载期间存在 target 校验提前退化。修复方案：① 将实体清空逻辑由全生命周期 `useEffect([view])` 收敛至用户主动点击 Tab 栏的 `handleViewChange` 与 `openRelatedTimetable`；② 优化版本与目标 ID 校验生命周期，优先保留 URL 传入的 `versionId` 与目标实体；③ 在左侧实体列表中新增 `activeSidebarItemRef` 与 `scrollIntoView` 机制，页面跳转进入后自动将选中的教师/班级/教室滚动至视口居中高亮。新增单测覆盖体检报告跳转属性匹配，`npm run test:sqlite` **195/195 全绿**，typecheck、eslint、build 保持 100% 通过。 |
 
 ---
 
