@@ -8,6 +8,8 @@ import { TeachingMatrixPage } from '@renderer/pages/TeachingMatrix/TeachingMatri
 import { RulesPage } from '@renderer/pages/Rules/RulesPage'
 import { SchedulingPage } from '@renderer/pages/Scheduling/SchedulingPage'
 import { TimetablePage } from '@renderer/pages/Timetable/TimetablePage'
+import { ReportPage } from '@renderer/pages/Report/ReportPage'
+import { ExportCenterPage } from '@renderer/pages/Export/ExportCenterPage'
 
 export const router = createHashRouter([
   {
@@ -21,8 +23,8 @@ export const router = createHashRouter([
       { path: 'rules', element: <RulesPage /> },
       { path: 'scheduling', element: <SchedulingPage /> },
       { path: 'timetable', element: <TimetablePage /> },
-      { path: 'report', element: <PlaceholderPage title="体检报告" milestone="M7 · 报告与导出" /> },
-      { path: 'export', element: <PlaceholderPage title="导出中心" milestone="M7 · 报告与导出" /> },
+      { path: 'report', element: <ReportPage /> },
+      { path: 'export', element: <ExportCenterPage /> },
       {
         path: 'versions',
         element: <PlaceholderPage title="版本历史" milestone="M9 · 扩展（选做）" />

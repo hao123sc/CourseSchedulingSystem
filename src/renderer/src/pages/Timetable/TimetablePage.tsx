@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+<<<<<<< HEAD
+=======
+import { useSearchParams } from 'react-router-dom'
+>>>>>>> 9a60a76 (feat(M7): 完成课表体检报告与统一导出中心 (ReportPage + ExportCenterPage + reportModel))
 import { cn } from '@renderer/lib/utils'
 import { api } from '@renderer/lib/api'
 import { toast } from '@renderer/stores/toastStore'
@@ -32,6 +36,7 @@ const VIEW_TABS: { key: TTView; label: string }[] = [
 ]
 
 export function TimetablePage(): React.JSX.Element {
+  const [searchParams] = useSearchParams()
   const { currentSemester, loaded, load } = useSchoolStore()
   const meta = useMetaStore()
   const semesterId = currentSemester?.id ?? null
@@ -53,6 +58,26 @@ export function TimetablePage(): React.JSX.Element {
   const history = useRef(new AdjustmentHistory(50))
   const pendingRelatedJump = useRef<{ view: 'class' | 'teacher'; targetId: number; stageId: number | null } | null>(null)
 
+  // 处理来自其他页面（如体检报告、导出中心、开始排课）的 URL 跳转参数
+  useEffect(() => {
+    const vIdStr = searchParams.get('versionId')
+    const vView = searchParams.get('view') as TTView | null
+    const tIdStr = searchParams.get('targetId')
+    const sIdStr = searchParams.get('stageId')
+
+    if (vIdStr && !isNaN(Number(vIdStr))) {
+      setVersionId(Number(vIdStr))
+    }
+    if (vView && ['class', 'teacher', 'room', 'overview'].includes(vView)) {
+      setView(vView)
+    }
+    if (tIdStr && !isNaN(Number(tIdStr))) {
+      setTargetId(Number(tIdStr))
+    }
+    if (sIdStr && !isNaN(Number(sIdStr))) {
+      setStageId(Number(sIdStr))
+    }
+  }, [searchParams])
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])

@@ -14,7 +14,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/rules', label: '排课规则', icon: '🔧', implemented: true },
   { path: '/scheduling', label: '开始排课', icon: '▶️', implemented: true },
   { path: '/timetable', label: '课表', icon: '📅', implemented: true },
-  { path: '/report', label: '体检报告', icon: '📊', implemented: false },
-  { path: '/export', label: '导出中心', icon: '📤', implemented: false },
+  { path: '/report', label: '体检报告', icon: '📊', implemented: true },
+  { path: '/export', label: '导出中心', icon: '📤', implemented: true },
   { path: '/versions', label: '版本历史', icon: '🕐', implemented: false }
 ]
