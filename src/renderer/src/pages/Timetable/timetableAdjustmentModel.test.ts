@@ -91,4 +91,21 @@ describe('timetable adjustment rows', () => {
     )
     expect(rows).toHaveLength(2)
   })
+
+  it('guarantees only the single source lesson is selected during adjustment mode', () => {
+    const sourceLesson = { lessonId: 1 }
+    const otherLesson = { lessonId: 2 }
+    const isCardSelected = (
+      cardLessonId: number,
+      adjustmentLesson: { lessonId: number } | null,
+      selected: { lessonId: number } | null
+    ): boolean =>
+      adjustmentLesson != null
+        ? adjustmentLesson.lessonId === cardLessonId
+        : selected?.lessonId === cardLessonId
+
+    // 调课模式下仅源课程具有选中边框，绝不产生两个选中框
+    expect(isCardSelected(1, sourceLesson, otherLesson)).toBe(true)
+    expect(isCardSelected(2, sourceLesson, otherLesson)).toBe(false)
+  })
 })

@@ -218,7 +218,12 @@ export interface IpcApi {
 
   // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8/M9） ----
   'timetable:versionLessons': (versionId: number) => Lesson[]
-  'timetable:moveLesson': (payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) => Lesson
+  'timetable:moveLesson': (payload: {
+    versionId: number
+    lessonId: number
+    toSlotId: number
+    reason?: string
+  }) => Lesson
   'timetable:exportExcel': (params: TimetableExportParams) => ExcelExportResult
   'timetable:savePosterImage': (payload: {
     defaultName: string
@@ -237,15 +242,17 @@ export interface IpcApi {
     stripHeight: number
     rgba: Uint8Array | number[]
   }) => { success: boolean; error?: string }
-  'timetable:finishPosterExport': (payload: {
-    exportId: string
-  }) => { success: boolean; filePath: string; sizeBytes: number; error?: string }
-  'timetable:cancelPosterExport': (payload: {
-    exportId: string
-  }) => void
+  'timetable:finishPosterExport': (payload: { exportId: string }) => {
+    success: boolean
+    filePath: string
+    sizeBytes: number
+    error?: string
+  }
+  'timetable:cancelPosterExport': (payload: { exportId: string }) => void
   'seed:loadPreset': (preset: PresetCode) => PresetLoadResult
   'system:backup': () => { canceled: boolean; filePath: string | null }
   'system:restore': () => { canceled: boolean; success: boolean }
+  'system:resetData': () => { success: boolean; message: string }
 }
 
 export type PresetCode = 'complete' | 'junior' | 'senior' | 'primary' | 'stress'
@@ -258,11 +265,7 @@ export interface PresetLoadResult {
 }
 
 export type TimetableExportScope =
-  | 'current'
-  | 'all_classes'
-  | 'all_teachers'
-  | 'all_rooms'
-  | 'overview'
+  'current' | 'all_classes' | 'all_teachers' | 'all_rooms' | 'overview'
 
 export interface TimetableLayoutOptions {
   paperSize?: 'A4' | 'A3'

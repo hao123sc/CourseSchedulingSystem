@@ -1,5 +1,5 @@
 import { ipcMain, app } from 'electron'
-import { loadPreset } from '../services/presetService'
+import { loadPreset, resetAllData } from '../services/presetService'
 import { backupDatabase, restoreDatabase } from '../services/backupService'
 import type { PresetCode, SystemPingResult } from '@shared/types/ipc'
 
@@ -26,5 +26,8 @@ export function registerSystemIpc(): void {
   ipcMain.handle('system:restore', () => {
     return restoreDatabase()
   })
-}
 
+  ipcMain.handle('system:resetData', () => {
+    return resetAllData()
+  })
+}

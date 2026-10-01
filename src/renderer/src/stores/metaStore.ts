@@ -27,6 +27,7 @@ interface MetaState {
   slotsByStage: Record<number, TimeSlot[]>
   load: (semesterId: number, force?: boolean) => Promise<void>
   reloadSubjects: () => Promise<void>
+  reset: () => void
 }
 
 export const useMetaStore = create<MetaState>((set, get) => ({
@@ -69,7 +70,20 @@ export const useMetaStore = create<MetaState>((set, get) => ({
 
   reloadSubjects: async () => {
     set({ subjects: await api['subject:list']() })
-  }
+  },
+
+  reset: () =>
+    set({
+      loadedSemesterId: null,
+      loading: false,
+      stages: [],
+      grades: [],
+      classes: [],
+      subjects: [],
+      teachers: [],
+      classrooms: [],
+      slotsByStage: {}
+    })
 }))
 
 /** 派生：班级 id → 所属年级 */

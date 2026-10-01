@@ -151,7 +151,9 @@ export function TimetableGrid({
                             key={l.key}
                             lesson={l}
                             selected={
-                              selected?.key === l.key || adjustmentLesson?.lessonId === l.lessonId
+                              adjustmentLesson != null
+                                ? adjustmentLesson.lessonId === l.lessonId
+                                : selected?.key === l.key
                             }
                             waterfallIndex={wf}
                             stack={items.length > 1 ? { index: i, count: items.length } : undefined}

@@ -30,6 +30,7 @@ export function HomePage(): React.JSX.Element {
   const [tasks, setTasks] = useState<TeachingTask[]>([])
   const [loadingPreset, setLoadingPreset] = useState<PresetCode | null>(null)
   const [backingUp, setBackingUp] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     if (!loaded) void load()
@@ -170,6 +171,36 @@ export function HomePage(): React.JSX.Element {
     }
   }
 
+  const handleResetData = async (): Promise<void> => {
+    if (
+      !confirm(
+        '⚠️ 警告：确定要清空全部业务数据并恢复初始状态吗？\n\n' +
+          '• 将清除所有学校、学期、年级、班级、教师、场地、教学任务、排课规则与课表结果；\n' +
+          '• 学段作息、19个内置学科与3档权重档位将恢复为出厂默认设置；\n' +
+          '• 建议在清空前先点击「💾 备份数据」。\n\n' +
+          '是否确定继续清空？'
+      )
+    ) {
+      return
+    }
+
+    setResetting(true)
+    try {
+      const res = await api['system:resetData']()
+      if (res.success) {
+        toast.success(res.message)
+        await load()
+        meta.reset()
+        setVersions([])
+        setTasks([])
+      }
+    } catch (err) {
+      toast.error(`清空数据失败: ${String(err)}`)
+    } finally {
+      setResetting(false)
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6 pb-16">
       {/* ===== 顶部横幅 ===== */}
@@ -197,6 +228,15 @@ export function HomePage(): React.JSX.Element {
             </Button>
             <Button variant="outline" size="sm" onClick={handleRestore}>
               📂 恢复备份
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              onClick={handleResetData}
+              disabled={resetting || loadingPreset !== null}
+            >
+              {resetting ? '正在清空...' : '🗑️ 清空数据'}
             </Button>
             <Button variant="default" size="sm" onClick={() => navigate('/scheduling')}>
               ▶ 开始排课
@@ -302,14 +342,25 @@ export function HomePage(): React.JSX.Element {
       {/* ===== 快速体验预设数据中心 ===== */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="flex items-center gap-2 text-base font-bold">
               <span>⚡</span> 预设示范数据一键载入
             </CardTitle>
-            <Badge tone="amber">演示与测评专用</Badge>
+            <div className="flex items-center gap-2">
+              <Badge tone="amber">演示与测评专用</Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-200 text-xs text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                onClick={handleResetData}
+                disabled={resetting || loadingPreset !== null}
+              >
+                {resetting ? '正在清空...' : '🗑️ 清空全部数据（恢复初始）'}
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-[color:var(--text-secondary)]">
-            一键载入不同类型学校的全套基础数据、国家课标任务与时段规则，并自动完成排课求解
+            一键载入不同类型学校的全套基础数据、国家课标任务与时段规则，并自动完成排课求解；或一键清空全部数据恢复出厂初始状态
           </p>
         </CardHeader>
         <CardContent>

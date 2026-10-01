@@ -6,6 +6,126 @@ import { CURRICULUM_PRESETS } from '@shared/curriculumPresets'
 import type { PresetCode, PresetLoadResult } from '@shared/types/ipc'
 import { loadFullSchoolPreset } from './fullSchoolPresetService'
 
+export function resetAllData(): { success: boolean; message: string } {
+  const db = getDb()
+  const tx = db.transaction(() => {
+    // 1. 清空所有业务数据与历史日志
+    db.prepare('DELETE FROM adjust_log').run()
+    db.prepare('DELETE FROM lesson').run()
+    db.prepare('DELETE FROM schedule_version').run()
+    db.prepare('DELETE FROM fixed_lesson').run()
+    db.prepare('DELETE FROM time_rule').run()
+    db.prepare('DELETE FROM subject_classroom').run()
+    db.prepare('DELETE FROM group_member').run()
+    db.prepare('DELETE FROM constraint_group').run()
+    db.prepare('DELETE FROM teaching_task').run()
+    db.prepare('DELETE FROM klass').run()
+    db.prepare('DELETE FROM grade').run()
+    db.prepare('DELETE FROM classroom').run()
+    db.prepare('DELETE FROM teacher_subject').run()
+    db.prepare('DELETE FROM teacher').run()
+    db.prepare('DELETE FROM semester').run()
+    db.prepare('DELETE FROM school').run()
+    db.prepare('DELETE FROM health_check').run()
+
+    // 2. 清理预设动态创建的学段专属实验学科（stage_id IS NOT NULL），保留 19 个通用内置学科
+    db.prepare('DELETE FROM subject WHERE stage_id IS NOT NULL').run()
+
+    // 3. 恢复出厂三学段启用状态（小学/初中/高中全开启）与标准默认作息
+    const stageConfigs: StageConfig[] = [
+      {
+        id: 1,
+        code: 'primary',
+        name: '小学部',
+        enabled: true,
+        periodsPerDay: 7,
+        daysPerWeek: 5,
+        morningPeriods: 4,
+        afternoonPeriods: 3,
+        nightPeriods: 0
+      },
+      {
+        id: 2,
+        code: 'junior',
+        name: '初中部',
+        enabled: true,
+        periodsPerDay: 8,
+        daysPerWeek: 5,
+        morningPeriods: 5,
+        afternoonPeriods: 3,
+        nightPeriods: 0
+      },
+      {
+        id: 3,
+        code: 'senior',
+        name: '高中部',
+        enabled: true,
+        periodsPerDay: 13,
+        daysPerWeek: 5,
+        morningPeriods: 5,
+        afternoonPeriods: 4,
+        nightPeriods: 3
+      }
+    ]
+
+    for (const sc of stageConfigs) {
+      db.prepare(
+        `UPDATE stage SET enabled = ?, days_per_week = ?, has_evening = ? WHERE id = ?`
+      ).run(sc.enabled ? 1 : 0, sc.daysPerWeek, sc.nightPeriods > 0 ? 1 : 0, sc.id)
+      db.prepare(`DELETE FROM time_slot WHERE stage_id = ?`).run(sc.id)
+      let order = 1
+      for (let d = 1; d <= sc.daysPerWeek; d++) {
+        if (sc.code === 'primary') {
+          for (let p = 1; p <= 7; p++) {
+            const seg = p <= 4 ? 'morning' : 'afternoon'
+            db.prepare(
+              `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`
+            ).run(sc.id, d, p, `第${p}节`, `${7 + p}:00`, `${7 + p}:40`, seg, order++)
+          }
+        } else if (sc.code === 'junior') {
+          for (let p = 1; p <= 8; p++) {
+            const seg = p <= 5 ? 'morning' : 'afternoon'
+            db.prepare(
+              `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`
+            ).run(sc.id, d, p, `第${p}节`, `${7 + p}:00`, `${7 + p}:45`, seg, order++)
+          }
+        } else if (sc.code === 'senior') {
+          // 早读 (period_index: 0)
+          db.prepare(
+            `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+             VALUES (?, ?, 0, '早读', '07:30', '08:00', 'morning', 1, ?)`
+          ).run(sc.id, d, order++)
+          // 上午 1~5
+          for (let p = 1; p <= 5; p++) {
+            db.prepare(
+              `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, 'morning', 1, ?)`
+            ).run(sc.id, d, p, `第${p}节`, `${7 + p}:00`, `${7 + p}:45`, order++)
+          }
+          // 下午 6~9
+          for (let p = 6; p <= 9; p++) {
+            db.prepare(
+              `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, 'afternoon', 1, ?)`
+            ).run(sc.id, d, p, `第${p}节`, `${8 + p}:00`, `${8 + p}:45`, order++)
+          }
+          // 晚自习 1~3
+          for (let p = 1; p <= 3; p++) {
+            db.prepare(
+              `INSERT INTO time_slot (stage_id, day_of_week, period_index, period_name, start_time, end_time, segment, is_teaching, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, 'evening', 1, ?)`
+            ).run(sc.id, d, 9 + p, `晚自习${p}`, `${18 + p}:30`, `${19 + p}:15`, order++)
+          }
+        }
+      }
+    }
+  })
+  tx()
+  return { success: true, message: '系统已成功清空全部业务数据并恢复出厂初始状态' }
+}
+
 interface StageConfig {
   id: number
   code: string

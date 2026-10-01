@@ -1,10 +1,46 @@
 import { describe, expect, it } from 'vitest'
-import { loadPreset } from './presetService'
+import { loadPreset, resetAllData } from './presetService'
 import { FULL_SCHOOL_EXPECTED } from './fullSchoolPresetService'
 import { checkSolverInput } from './solverInputService'
 import { getDb } from '../db/connection'
 
 describe('M8 · 预设示范数据与一键体验', () => {
+  it('resets all business data back to initial factory state', () => {
+    loadPreset('junior')
+    const res = resetAllData()
+    expect(res.success).toBe(true)
+
+    const db = getDb()
+    const scalar = (sql: string): number => (db.prepare(sql).get() as { n: number }).n
+    expect(scalar('SELECT COUNT(*) n FROM school')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM semester')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM grade')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM klass')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM teacher')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM classroom')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM teaching_task')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM fixed_lesson')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM constraint_group')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM schedule_version')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM lesson')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM adjust_log')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM subject')).toBe(19)
+    expect(scalar('SELECT COUNT(*) n FROM subject WHERE stage_id IS NOT NULL')).toBe(0)
+
+    const stages = db
+      .prepare(
+        `SELECT s.code, COUNT(ts.id) n FROM stage s
+          LEFT JOIN time_slot ts ON ts.stage_id=s.id
+         WHERE s.enabled=1 GROUP BY s.id ORDER BY s.sort_order`
+      )
+      .all() as { code: string; n: number }[]
+    expect(stages).toEqual([
+      { code: 'primary', n: 35 },
+      { code: 'junior', n: 40 },
+      { code: 'senior', n: 65 }
+    ])
+  })
+
   it('loads "junior" preset and verifies database records', () => {
     const res = loadPreset('junior')
     expect(res.success).toBe(true)

@@ -133,6 +133,7 @@ const zhikepaiApi: {
   'seed:loadPreset': (preset) => ipcRenderer.invoke('seed:loadPreset', preset),
   'system:backup': () => ipcRenderer.invoke('system:backup'),
   'system:restore': () => ipcRenderer.invoke('system:restore'),
+  'system:resetData': () => ipcRenderer.invoke('system:resetData'),
 
   // ---- 课表（M4/M7/M9） ----
   'timetable:versionLessons': (versionId) =>

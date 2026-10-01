@@ -463,17 +463,18 @@ export function TimetablePage(): React.JSX.Element {
   }
 
   const handleLessonClick = (lesson: GridLesson): void => {
-    setSelected(lesson)
     if (adjustmentSaving) return
     if (clickAdjustmentLesson != null) {
       if (clickAdjustmentLesson.lessonId === lesson.lessonId) {
         setClickAdjustmentLesson(null)
+        setSelected(null)
         setAdjustmentNotice('已取消单击调课')
       } else {
         void moveLesson(clickAdjustmentLesson, lesson.slotId, 'click')
       }
       return
     }
+    setSelected(lesson)
     if (lesson.lessonId == null || lesson.locked || lesson.overlay) {
       setAdjustmentNotice('该课程属于预排锁定内容，不可调整')
       return
@@ -919,7 +920,7 @@ export function TimetablePage(): React.JSX.Element {
               axis={axis}
               targetId={resolvedTargetId}
               gaps={gaps}
-              selectedLesson={selected}
+              selectedLesson={clickAdjustmentLesson ?? selected}
               slots={activeStageId ? (meta.slotsByStage[activeStageId] ?? []) : []}
               subjects={meta.subjects}
               teachers={meta.teachers}
