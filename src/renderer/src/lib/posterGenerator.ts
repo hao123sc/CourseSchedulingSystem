@@ -131,9 +131,9 @@ export function calculatePosterMetrics(
     signatureHeight +
     40
 
-  // 安全防溢出：单边不超过 10000 像素，总像素不超过 4500 万像素（保证 GPU/内存极度稳定）
-  const MAX_DIMENSION = 10000
-  const MAX_PIXELS = 45_000_000
+  // 浏览器原生 Canvas 2D 物理单边极限（32767 像素），放开人工限制以支持 20000+ px 印刷级超巨幅海报
+  const MAX_DIMENSION = 32767
+  const MAX_PIXELS = 400_000_000
 
   let actualScale = requestedScale
   if (totalWidthBase * actualScale > MAX_DIMENSION) {
@@ -146,7 +146,7 @@ export function calculatePosterMetrics(
   if (totalPixels > MAX_PIXELS) {
     actualScale = Math.min(actualScale, Math.sqrt(MAX_PIXELS / (totalWidthBase * totalHeightBase)))
   }
-  actualScale = Math.max(0.8, Number(actualScale.toFixed(2)))
+  actualScale = Math.max(0.5, Number(actualScale.toFixed(2)))
 
   const widthPx = Math.round(totalWidthBase * actualScale)
   const heightPx = Math.round(totalHeightBase * actualScale)

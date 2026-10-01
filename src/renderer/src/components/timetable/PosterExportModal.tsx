@@ -295,8 +295,9 @@ export function PosterExportModal({
                   <option value={1}>1.0x (96 DPI · 网页/电子班牌查看)</option>
                   <option value={1.5}>1.5x (150 DPI · 普通清晰度打印)</option>
                   <option value={2}>2.0x (200 DPI · 建议 1~1.5m 展板喷绘)</option>
-                  <option value={3}>3.0x (300 DPI · 广告公司专业印刷级 · 巨幅喷绘)</option>
-                  <option value={4}>4.0x (400 DPI · 超巨幅 2~3m 展板印刷)</option>
+                  <option value={3}>3.0x (300 DPI · 广告公司专业印刷级 · 完整高分辨率)</option>
+                  <option value={3.5}>3.5x (350 DPI · 巨幅 20000+ px 展板超清印刷)</option>
+                  <option value={4}>4.0x (400 DPI · 超巨幅 2~3m 展板极致精细)</option>
                 </Select>
               </div>
 
