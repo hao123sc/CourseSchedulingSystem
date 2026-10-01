@@ -1,0 +1,44 @@
+appId: com.zhikepai.app
+productName: 智课排
+copyright: Copyright © 2026
+directories:
+  output: release-builds
+  buildResources: resources/icons
+files:
+  - out/**/*
+  - package.json
+asar: true
+# better-sqlite3 是原生模块（含 .node 二进制），必须解出 asar 之外才能被 Node 的
+# dlopen 正确加载，否则打包后启动即崩（M0 的头号风险点）。
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+  - '**/node_modules/bindings/**'
+  - '**/node_modules/file-uri-to-path/**'
+  # 排课 worker 产物：worker_threads 的文件读取不走 Electron 的 asar 补丁，
+  # 必须解出 asar 之外（路径解析见 src/main/services/solverRunService.ts）。
+  # rollup 会把公共模块拆进 chunks/，worker 从自己目录 require 它，一并解包
+  - 'out/main/solverWorker.js'
+  - 'out/main/chunks/**'
+win:
+  target:
+    - target: portable
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+  icon: resources/icons/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: '${productName}-Setup-${version}.${ext}'
+portable:
+  artifactName: '${productName}-${version}-portable.${ext}'
+linux:
+  target:
+    - target: dir
+    - target: AppImage
+  icon: resources/icons/icon.png
+  category: Education
+mac:
+  target:
+    - target: dir
+  icon: resources/icons/icon.png
