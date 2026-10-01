@@ -7,22 +7,33 @@ import { toast } from '@renderer/stores/toastStore'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import { Select } from '@renderer/components/ui/select'
+import { Input } from '@renderer/components/ui/input'
 import { Badge } from '@renderer/components/ui/badge'
-import type { Lesson, ScheduleVersion } from '@shared/types/entities'
-import type { TimetableExportScope } from '@shared/types/ipc'
+import { PosterExportModal } from '@renderer/components/timetable/PosterExportModal'
+import type { FixedLesson, Lesson, ScheduleVersion } from '@shared/types/entities'
+import type { TimetableExportScope, TimetableLayoutOptions } from '@shared/types/ipc'
 
 export function ExportCenterPage(): React.JSX.Element {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { currentSemester, loaded, load } = useSchoolStore()
+  const { school, currentSemester, loaded, load } = useSchoolStore()
   const meta = useMetaStore()
   const semesterId = currentSemester?.id ?? null
 
   const [versions, setVersions] = useState<ScheduleVersion[]>([])
   const [versionId, setVersionId] = useState<number | null>(null)
   const [lessons, setLessons] = useState<Lesson[]>([])
+  const [fixedLessons, setFixedLessons] = useState<FixedLesson[]>([])
   const [loading, setLoading] = useState(false)
   const [exportingCard, setExportingCard] = useState<string | null>(null)
+  const [posterModalOpen, setPosterModalOpen] = useState(false)
+
+  // A4 排版与自定义参数
+  const [showLayoutConfig, setShowLayoutConfig] = useState(false)
+  const [paperSize, setPaperSize] = useState<'A4' | 'A3'>('A4')
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
+  const [customHeader, setCustomHeader] = useState('')
+  const [customFooter, setCustomFooter] = useState('智课排智能排课系统 · 正式课表')
 
   // 实体导出选择状态
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null)
@@ -42,7 +53,7 @@ export function ExportCenterPage(): React.JSX.Element {
     if (semesterId != null) void meta.load(semesterId)
   }, [semesterId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 读取排课版本
+  // 读取排课版本与预排锁定
   useEffect(() => {
     if (semesterId == null) return
     let alive = true
@@ -59,6 +70,11 @@ export function ExportCenterPage(): React.JSX.Element {
         }
       })
       .catch((e) => toast.error(`读取版本列表失败: ${String(e)}`))
+
+    api['fixedLesson:list'](semesterId)
+      .then((rows) => alive && setFixedLessons(rows))
+      .catch(() => alive && setFixedLessons([]))
+
     return () => {
       alive = false
     }
@@ -129,6 +145,14 @@ export function ExportCenterPage(): React.JSX.Element {
       return
     }
 
+    const layoutOptions: TimetableLayoutOptions = {
+      paperSize,
+      orientation,
+      fitToPage: true,
+      customHeader: customHeader.trim() || undefined,
+      customFooter: customFooter.trim() || undefined
+    }
+
     setExportingCard(cardKey)
     try {
       const res = await api['timetable:exportExcel']({
@@ -137,7 +161,8 @@ export function ExportCenterPage(): React.JSX.Element {
         stageId: params.stageId ?? selectedStageId,
         view: params.view,
         targetId: params.targetId ?? null,
-        scope: params.scope
+        scope: params.scope,
+        layoutOptions
       })
 
       if (res.canceled) {
@@ -219,7 +244,15 @@ export function ExportCenterPage(): React.JSX.Element {
             onClick={() => window.print()}
             title="打印当前页面或课表"
           >
-            🖨️ 打印预览
+            🖨️ A4 打印预览
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPosterModalOpen(true)}
+            className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950"
+          >
+            🖼️ 大幅海报图片导出
           </Button>
           <Button
             variant="outline"
@@ -249,6 +282,7 @@ export function ExportCenterPage(): React.JSX.Element {
                 </span>
                 {activeVersion.isPublished && <Badge tone="green">已发布</Badge>}
                 <Badge tone="brand">Excel 2007+ (.xlsx)</Badge>
+                <Badge tone="slate">A4 单页打印优化</Badge>
               </div>
               <p className="text-xs text-[color:var(--text-secondary)]">
                 当前版本共排定 {lessons.length} 节课程 · 包含 {meta.classes.length} 个班级、{meta.teachers.filter((t) => t.enabled).length} 名教师、{meta.classrooms.filter((r) => r.enabled).length} 间教室
@@ -256,6 +290,14 @@ export function ExportCenterPage(): React.JSX.Element {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPosterModalOpen(true)}
+                className="gap-1.5 border-brand-300 text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300"
+              >
+                🖼️ 广告公司海报图 (300DPI)
+              </Button>
               <Button
                 variant="default"
                 size="sm"
@@ -268,11 +310,88 @@ export function ExportCenterPage(): React.JSX.Element {
                   })
                 }
               >
-                {exportingCard === 'quick_overview' ? '正在导出...' : '⚡ 一键导出全校总课表'}
+                {exportingCard === 'quick_overview' ? '正在导出...' : '⚡ 一键导出全校总课表 (Excel)'}
               </Button>
             </div>
           </div>
         )}
+
+        {/* ===== A4 纸排版与自定义版式配置栏 ===== */}
+        <div className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] p-4 shadow-xs">
+          <div
+            className="flex cursor-pointer items-center justify-between"
+            onClick={() => setShowLayoutConfig(!showLayoutConfig)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">📄</span>
+              <span className="text-sm font-semibold text-[color:var(--text-primary)]">
+                A4 / A3 纸张打印与自定义排版设置
+              </span>
+              <span className="rounded bg-brand-50 px-2 py-0.5 text-xs text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                {paperSize} {orientation === 'landscape' ? '横向 (推荐单页铺满)' : '纵向'}
+              </span>
+            </div>
+            <span className="text-xs text-[color:var(--text-secondary)]">
+              {showLayoutConfig ? '收起配置 ▲' : '展开自定义排版选项 ▼'}
+            </span>
+          </div>
+
+          {showLayoutConfig && (
+            <div className="mt-4 grid grid-cols-1 gap-4 border-t border-[color:var(--border-subtle)] pt-4 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="text-xs font-medium text-[color:var(--text-secondary)]">
+                  纸张大小
+                </label>
+                <Select
+                  value={paperSize}
+                  onChange={(e) => setPaperSize(e.target.value as 'A4' | 'A3')}
+                  className="mt-1"
+                >
+                  <option value="A4">A4 纸张 (210 × 297 mm · 标准推荐)</option>
+                  <option value="A3">A3 纸张 (297 × 420 mm · 大版面)</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[color:var(--text-secondary)]">
+                  打印方向
+                </label>
+                <Select
+                  value={orientation}
+                  onChange={(e) => setOrientation(e.target.value as 'landscape' | 'portrait')}
+                  className="mt-1"
+                >
+                  <option value="landscape">横向排版 (自适应单页 · 最佳体验)</option>
+                  <option value="portrait">纵向排版</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[color:var(--text-secondary)]">
+                  自定义页眉大标题 (可选)
+                </label>
+                <Input
+                  value={customHeader}
+                  onChange={(e) => setCustomHeader(e.target.value)}
+                  placeholder="留空自动生成学校名称与学期"
+                  className="mt-1 h-9 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-[color:var(--text-secondary)]">
+                  自定义页脚审批签名 (可选)
+                </label>
+                <Input
+                  value={customFooter}
+                  onChange={(e) => setCustomFooter(e.target.value)}
+                  placeholder="如：教务处审核：______ 校长审批：______"
+                  className="mt-1 h-9 text-xs"
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* ===== 导出功能卡片网格 ===== */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -283,10 +402,10 @@ export function ExportCenterPage(): React.JSX.Element {
                 <CardTitle className="flex items-center gap-2 text-base font-bold">
                   <span>🏫</span> 班级课表导出
                 </CardTitle>
-                <Badge tone="brand">常用</Badge>
+                <Badge tone="brand">A4 单页适配</Badge>
               </div>
               <p className="text-xs text-[color:var(--text-secondary)]">
-                支持批量导出全学段所有班级（每个班级独立工作表），或导出指定单个班级
+                支持批量导出全学段所有班级（每个班级独立工作表，自动配置单页 A4 打印），或导出指定单个班级
               </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -354,7 +473,7 @@ export function ExportCenterPage(): React.JSX.Element {
                 {exportingCard === 'class'
                   ? '正在导出班级课表...'
                   : classExportMode === 'batch'
-                    ? `导出全部班级课表 (${stageClasses.length} 个班)`
+                    ? `导出全部班级课表 (${stageClasses.length} 个班 · A4排版)`
                     : '导出当前选中班级课表'}
               </Button>
             </CardContent>
@@ -367,10 +486,10 @@ export function ExportCenterPage(): React.JSX.Element {
                 <CardTitle className="flex items-center gap-2 text-base font-bold">
                   <span>👨‍🏫</span> 教师课表导出
                 </CardTitle>
-                <Badge tone="green">全校</Badge>
+                <Badge tone="green">A4 单页适配</Badge>
               </div>
               <p className="text-xs text-[color:var(--text-secondary)]">
-                支持批量导出全校所有在职教师课表（一师一表），或导出指定任课教师
+                支持批量导出全校所有任课教师课表（每位教师独立 Sheet），或导出单个教师课表
               </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -384,9 +503,9 @@ export function ExportCenterPage(): React.JSX.Element {
                   }`}
                   onClick={() => setTeacherExportMode('batch')}
                 >
-                  批量导出全部教师
+                  批量导出全校教师
                   <span className="block text-[11px] font-normal text-[color:var(--text-secondary)]">
-                    生成全校 {meta.teachers.filter((t) => t.enabled).length} 位教师的多 Sheet 工作簿
+                    生成包含 {meta.teachers.filter((t) => t.enabled).length} 位教师的多 Sheet 表
                   </span>
                 </button>
                 <button
@@ -439,7 +558,7 @@ export function ExportCenterPage(): React.JSX.Element {
                 {exportingCard === 'teacher'
                   ? '正在导出教师课表...'
                   : teacherExportMode === 'batch'
-                    ? `导出全校教师课表 (${meta.teachers.filter((t) => t.enabled).length} 位)`
+                    ? `导出全校教师课表 (${meta.teachers.filter((t) => t.enabled).length} 位 · A4排版)`
                     : '导出当前选中教师课表'}
               </Button>
             </CardContent>
@@ -530,44 +649,76 @@ export function ExportCenterPage(): React.JSX.Element {
             </CardContent>
           </Card>
 
-          {/* 4. 全校总课表 (Overview) */}
+          {/* 4. 全校总课表 (Overview + Poster) */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-base font-bold">
-                  <span>📊</span> 全景总课表导出
+                  <span>📊</span> 全景总课表 & 广告大幅喷绘
                 </CardTitle>
-                <Badge tone="amber">教务总表</Badge>
+                <Badge tone="amber">大幅面打印</Badge>
               </div>
               <p className="text-xs text-[color:var(--text-secondary)]">
-                导出包含全学段所有年级、班级与节次的全景横向总课表，便于教务处巡课与归档
+                导出全景横向总课表 Excel，或生成 150~300 DPI 超高分辨率海报图片供广告公司大型喷绘张贴
               </p>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="rounded-lg border border-[color:var(--border-subtle)] bg-slate-50/60 p-3 text-xs leading-relaxed text-[color:var(--text-secondary)] dark:bg-slate-800/40">
-                <div className="font-semibold text-[color:var(--text-primary)]">总表规格说明：</div>
-                • 横向展开周一至周五全部时段，竖向对齐各年级与班级；<br />
-                • 标注科目、授课教师、上课教室及预排锁定标记；<br />
-                • 末尾自动统计全校班级数、总课节数、授课教师及空位分布。
+                <div className="font-semibold text-[color:var(--text-primary)]">大幅面印刷与张贴说明：</div>
+                • <strong>广告喷绘海报：</strong>支持 300 DPI 高精位图输出，内置学科调色板与教务签名栏，适合制作 1.5~3 米巨幅展板；<br />
+                • <strong>全景 Excel：</strong>横向展开周一至周五全部时段，自动配置 A3 跨页居中打印。
               </div>
 
-              <Button
-                variant="default"
-                disabled={exportingCard !== null}
-                onClick={() =>
-                  handleExport('overview', {
-                    view: 'overview',
-                    scope: 'overview',
-                    stageId: selectedStageId
-                  })
-                }
-              >
-                {exportingCard === 'overview' ? '正在导出总课表...' : '导出全景总课表 (Excel)'}
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  variant="default"
+                  className="flex-1 gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
+                  onClick={() => setPosterModalOpen(true)}
+                >
+                  🖼️ 导出大幅海报图片 (广告公司张贴)
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={exportingCard !== null}
+                  onClick={() =>
+                    handleExport('overview', {
+                      view: 'overview',
+                      scope: 'overview',
+                      stageId: selectedStageId
+                    })
+                  }
+                >
+                  {exportingCard === 'overview' ? '正在导出总表...' : '导出 Excel 总课表'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* 大幅面海报导出模态框 */}
+      {semesterId != null && (
+        <PosterExportModal
+          open={posterModalOpen}
+          onClose={() => setPosterModalOpen(false)}
+          semesterId={semesterId}
+          versionId={versionId}
+          stageId={selectedStageId}
+          stageName={meta.stages.find((s) => s.id === selectedStageId)?.name}
+          schoolName={school?.name}
+          semesterName={currentSemester?.name}
+          versionName={activeVersion?.name}
+          classes={meta.classes}
+          grades={meta.grades}
+          slots={selectedStageId ? meta.slotsByStage[selectedStageId] ?? [] : []}
+          lessons={lessons}
+          fixedLessons={fixedLessons}
+          subjects={meta.subjects}
+          teachers={meta.teachers}
+          classrooms={meta.classrooms}
+        />
+      )}
     </div>
   )
 }

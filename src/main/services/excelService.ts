@@ -1,4 +1,5 @@
 import { dialog, BrowserWindow } from 'electron'
+import fs from 'fs'
 import ExcelJS from 'exceljs'
 import { getDb } from '../db/connection'
 import { schoolRepo } from '../db/repositories/schoolRepo'
@@ -179,6 +180,32 @@ export function writeSingleTimetableWorksheet(
   }
 
   ws.views = [{ state: 'frozen', ySplit: 3 }]
+
+  // 7. A4 纸排版与打印设置（确保单张 A4/A3 纸完美自适应）
+  const orientation = data.layoutOptions?.orientation ?? 'landscape'
+  const paperSize = (data.layoutOptions?.paperSize === 'A3' ? 8 : 9) as ExcelJS.PaperSize // 9 = A4, 8 = A3
+  ws.pageSetup = {
+    paperSize,
+    orientation,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    horizontalCentered: true,
+    verticalCentered: false,
+    margins: {
+      left: 0.3,
+      right: 0.3,
+      top: 0.4,
+      bottom: 0.4,
+      header: 0.2,
+      footer: 0.2
+    },
+    showGridLines: true
+  }
+  ws.headerFooter = {
+    oddHeader: `&C&10&"Microsoft YaHei" ${data.layoutOptions?.customHeader || ''}`,
+    oddFooter: `&L&8&"Microsoft YaHei" ${data.layoutOptions?.customFooter || '智课排智能排课系统 · 正式课表'} &R&8&"Microsoft YaHei" 第 &P 页 / 共 &N 页`
+  }
 }
 
 /** 写入全校 / 学段总表工作表 */
@@ -326,6 +353,55 @@ export function writeOverviewWorksheet(ws: ExcelJS.Worksheet, data: OverviewExpo
   }
 
   ws.views = [{ state: 'frozen', xSplit: 2, ySplit: 4 }]
+
+  // 7. 总表 A3/大幅面纸张页面设置
+  ws.pageSetup = {
+    paperSize: 8 as ExcelJS.PaperSize, // A3
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    verticalCentered: false,
+    margins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.3,
+      bottom: 0.3,
+      header: 0.15,
+      footer: 0.15
+    },
+    showGridLines: true
+  }
+  ws.headerFooter = {
+    oddHeader: `&C&10&"Microsoft YaHei" ${data.layoutOptions?.customHeader || ''}`,
+    oddFooter: `&L&8&"Microsoft YaHei" ${data.layoutOptions?.customFooter || '智课排全校总课表'} &R&8&"Microsoft YaHei" 第 &P 页 / 共 &N 页`
+  }
+}
+
+/** 保存大幅面海报图片文件（供广告公司大型喷绘张贴） */
+export async function savePosterImage(payload: {
+  defaultName: string
+  base64Data: string
+}): Promise<{ canceled: boolean; filePath: string | null }> {
+  const win = focused()
+  const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+    title: '保存大幅面海报图片（广告公司打印）',
+    defaultPath: payload.defaultName.replace(/[\\/:*?"<>|]/g, '_'),
+    filters: [
+      { name: 'PNG 高清图片 (*.png)', extensions: ['png'] },
+      { name: 'JPEG 图片 (*.jpg;*.jpeg)', extensions: ['jpg', 'jpeg'] }
+    ]
+  })
+
+  if (canceled || !filePath) return { canceled: true, filePath: null }
+
+  // 清洗 base64 前缀
+  const base64Image = payload.base64Data.replace(/^data:image\/\w+;base64,/, '')
+  const buffer = Buffer.from(base64Image, 'base64')
+  fs.writeFileSync(filePath, buffer)
+
+  return { canceled: false, filePath }
 }
 
 /** 课表 Excel 导出主服务 */
@@ -398,7 +474,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: { ...metaContext, stageName: stages.find((s) => s.id === sid)?.name }
+        meta: { ...metaContext, stageName: stages.find((s) => s.id === sid)?.name },
+        layoutOptions: params.layoutOptions
       })
       const ws = wb.addWorksheet(sheetData.sheetName)
       writeSingleTimetableWorksheet(ws, sheetData)
@@ -415,7 +492,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: metaContext
+        meta: metaContext,
+        layoutOptions: params.layoutOptions
       })
       const name = sanitizeSheetName(tch.staffNo ? `${tch.staffNo}_${tch.name}` : tch.name, `T_${tch.id}`)
       const ws = wb.addWorksheet(name)
@@ -433,7 +511,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: metaContext
+        meta: metaContext,
+        layoutOptions: params.layoutOptions
       })
       const ws = wb.addWorksheet(sheetData.sheetName)
       writeSingleTimetableWorksheet(ws, sheetData)
@@ -449,7 +528,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
       grades,
       lessons,
       fixedLessons,
-      meta: metaContext
+      meta: metaContext,
+      layoutOptions: params.layoutOptions
     })
     const ws = wb.addWorksheet(overviewData.sheetName)
     writeOverviewWorksheet(ws, overviewData)
@@ -469,7 +549,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: { ...metaContext, stageName: stages.find((s) => s.id === sid)?.name }
+        meta: { ...metaContext, stageName: stages.find((s) => s.id === sid)?.name },
+        layoutOptions: params.layoutOptions
       })
       const ws = wb.addWorksheet(sheetData.sheetName)
       writeSingleTimetableWorksheet(ws, sheetData)
@@ -486,7 +567,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: metaContext
+        meta: metaContext,
+        layoutOptions: params.layoutOptions
       })
       const ws = wb.addWorksheet(sheetData.sheetName)
       writeSingleTimetableWorksheet(ws, sheetData)
@@ -504,7 +586,8 @@ export async function exportTimetable(params: TimetableExportParams): Promise<Ex
         slots,
         lessons,
         fixedLessons,
-        meta: metaContext
+        meta: metaContext,
+        layoutOptions: params.layoutOptions
       })
       const ws = wb.addWorksheet(sheetData.sheetName)
       writeSingleTimetableWorksheet(ws, sheetData)

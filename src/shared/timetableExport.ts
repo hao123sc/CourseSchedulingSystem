@@ -8,6 +8,7 @@ import type {
   Teacher,
   TimeSlot
 } from './types/entities'
+import type { TimetableLayoutOptions } from './types/ipc'
 
 export type ExportViewType = 'class' | 'teacher' | 'room' | 'overview'
 
@@ -69,6 +70,7 @@ export interface SingleTimetableExportSheet {
   days: number[]
   dayNames: Record<number, string>
   rows: ExportPeriodRow[]
+  layoutOptions?: TimetableLayoutOptions
   stats: {
     totalLessons: number
     lockedLessons: number
@@ -109,6 +111,7 @@ export interface OverviewExportSheet {
   classes: { id: number; name: string; gradeId: number; gradeName: string }[]
   grades: { id: number; name: string; classCount: number }[]
   rows: OverviewExportRow[]
+  layoutOptions?: TimetableLayoutOptions
   stats: {
     classCount: number
     lessonCount: number
@@ -193,8 +196,9 @@ export function buildSingleTimetableExportSheet(params: {
   lessons: Lesson[]
   fixedLessons: FixedLesson[]
   meta: ExportMetaContext
+  layoutOptions?: TimetableLayoutOptions
 }): SingleTimetableExportSheet {
-  const { view, targetId, slots, lessons, fixedLessons, meta } = params
+  const { view, targetId, slots, lessons, fixedLessons, meta, layoutOptions } = params
 
   const subjectById = new Map(meta.subjects.map((s) => [s.id, s]))
   const teacherById = new Map(meta.teachers.map((t) => [t.id, t]))
@@ -407,7 +411,7 @@ export function buildSingleTimetableExportSheet(params: {
 
   return {
     sheetName: sanitizeSheetName(targetName, '课表'),
-    title,
+    title: layoutOptions?.customHeader ? layoutOptions.customHeader : title,
     subTitle,
     viewType: view,
     targetId,
@@ -415,6 +419,7 @@ export function buildSingleTimetableExportSheet(params: {
     days,
     dayNames: DAY_ZH_NAMES,
     rows,
+    layoutOptions,
     stats: {
       totalLessons: targetLessons.length,
       lockedLessons: lockedCount,
@@ -432,8 +437,9 @@ export function buildOverviewExportSheet(params: {
   lessons: Lesson[]
   fixedLessons: FixedLesson[]
   meta: ExportMetaContext
+  layoutOptions?: TimetableLayoutOptions
 }): OverviewExportSheet {
-  const { slots, stageClasses, grades, lessons, fixedLessons, meta } = params
+  const { slots, stageClasses, grades, lessons, fixedLessons, meta, layoutOptions } = params
 
   const subjectById = new Map(meta.subjects.map((s) => [s.id, s]))
   const teacherById = new Map(meta.teachers.map((t) => [t.id, t]))
@@ -595,7 +601,7 @@ export function buildOverviewExportSheet(params: {
 
   return {
     sheetName: sanitizeSheetName(meta.stageName ? `${meta.stageName}总表` : '全校总表', '总课表'),
-    title,
+    title: layoutOptions?.customHeader ? layoutOptions.customHeader : title,
     subTitle,
     stageName: meta.stageName ?? '全校',
     days,
@@ -603,6 +609,7 @@ export function buildOverviewExportSheet(params: {
     classes: classList,
     grades: gradeSummary,
     rows,
+    layoutOptions,
     stats: {
       classCount: sortedClasses.length,
       lessonCount: totalLessonsPlaced,

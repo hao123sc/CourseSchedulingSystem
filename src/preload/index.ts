@@ -134,11 +134,13 @@ const zhikepaiApi: {
   'system:backup': () => ipcRenderer.invoke('system:backup'),
   'system:restore': () => ipcRenderer.invoke('system:restore'),
 
-  // ---- 课表（M4/M7） ----
+  // ---- 课表（M4/M7/M9） ----
   'timetable:versionLessons': (versionId) =>
     ipcRenderer.invoke('timetable:versionLessons', versionId),
   'timetable:moveLesson': (payload) => ipcRenderer.invoke('timetable:moveLesson', payload),
   'timetable:exportExcel': (params) => ipcRenderer.invoke('timetable:exportExcel', params),
+  'timetable:savePosterImage': (payload) =>
+    ipcRenderer.invoke('timetable:savePosterImage', payload),
 
   // ---- 事件订阅（Main → Renderer） ----
   onScheduleEvent: (cb) => {

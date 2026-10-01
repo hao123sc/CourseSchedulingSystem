@@ -19,6 +19,7 @@ import { SwapSuggestPanel } from '@renderer/components/timetable/SwapSuggestPane
 import { TimetableGrid } from '@renderer/components/timetable/TimetableGrid'
 import { OverviewSheet } from '@renderer/components/timetable/OverviewSheet'
 import { ExportDialog } from '@renderer/components/timetable/ExportDialog'
+import { PosterExportModal } from '@renderer/components/timetable/PosterExportModal'
 
 /**
  * 课表页（M4 · docs/05 §4.5 + docs/mockups/timetable.html / overview.html 定稿）。
@@ -53,6 +54,7 @@ export function TimetablePage(): React.JSX.Element {
   const [draggingLesson, setDraggingLesson] = useState<GridLesson | null>(null)
   const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [posterModalOpen, setPosterModalOpen] = useState(false)
   const history = useRef(new AdjustmentHistory(50))
   const pendingRelatedJump = useRef<{ view: 'class' | 'teacher'; targetId: number; stageId: number | null } | null>(null)
 
@@ -564,9 +566,19 @@ export function TimetablePage(): React.JSX.Element {
           size="sm"
           onClick={() => setExportDialogOpen(true)}
           disabled={versionId == null}
-          title="导出课表 (Excel)"
+          title="导出课表 (Excel / A4排版)"
         >
           ↥ 导出
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setPosterModalOpen(true)}
+          disabled={versionId == null}
+          className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950"
+          title="生成 300 DPI 超高清海报图，供广告公司大幅面喷绘张贴"
+        >
+          🖼️ 大幅海报
         </Button>
         <Button
           size="sm"
@@ -742,6 +754,28 @@ export function TimetablePage(): React.JSX.Element {
                   ? meta.classrooms.find((r) => r.id === resolvedTargetId)?.name
                   : meta.stages.find((s) => s.id === activeStageId)?.name
           }
+        />
+      )}
+
+      {semesterId != null && (
+        <PosterExportModal
+          open={posterModalOpen}
+          onClose={() => setPosterModalOpen(false)}
+          semesterId={semesterId}
+          versionId={versionId}
+          stageId={activeStageId}
+          stageName={meta.stages.find((s) => s.id === activeStageId)?.name}
+          schoolName={currentSemester?.name ? '学校' : undefined}
+          semesterName={currentSemester?.name}
+          versionName={version?.name}
+          classes={meta.classes}
+          grades={meta.grades}
+          slots={activeStageId ? meta.slotsByStage[activeStageId] ?? [] : []}
+          lessons={lessons}
+          fixedLessons={fixed}
+          subjects={meta.subjects}
+          teachers={meta.teachers}
+          classrooms={meta.classrooms}
         />
       )}
     </div>

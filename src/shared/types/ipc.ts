@@ -216,10 +216,11 @@ export interface IpcApi {
   'schedule:cancel': () => boolean
   'schedule:isRunning': () => boolean
 
-  // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8） ----
+  // ---- 课表 / 报告 / 导出 / 种子数据（M4/M7/M8/M9） ----
   'timetable:versionLessons': (versionId: number) => Lesson[]
   'timetable:moveLesson': (payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) => Lesson
   'timetable:exportExcel': (params: TimetableExportParams) => ExcelExportResult
+  'timetable:savePosterImage': (payload: { defaultName: string; base64Data: string }) => { canceled: boolean; filePath: string | null }
   'seed:loadPreset': (preset: PresetCode) => PresetLoadResult
   'system:backup': () => { canceled: boolean; filePath: string | null }
   'system:restore': () => { canceled: boolean; success: boolean }
@@ -241,6 +242,15 @@ export type TimetableExportScope =
   | 'all_rooms'
   | 'overview'
 
+export interface TimetableLayoutOptions {
+  paperSize?: 'A4' | 'A3'
+  orientation?: 'landscape' | 'portrait'
+  fitToPage?: boolean
+  showStats?: boolean
+  customHeader?: string
+  customFooter?: string
+}
+
 export interface TimetableExportParams {
   semesterId: number
   versionId: number
@@ -248,6 +258,7 @@ export interface TimetableExportParams {
   view: 'class' | 'teacher' | 'room' | 'overview'
   targetId?: number | null
   scope?: TimetableExportScope
+  layoutOptions?: TimetableLayoutOptions
 }
 
 export type IpcChannel = keyof IpcApi
