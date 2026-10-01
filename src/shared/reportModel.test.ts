@@ -139,4 +139,52 @@ describe('reportModel · Health Report Pure Logic', () => {
     const hardIssue = report.issues.find((i) => i.title.includes('硬约束冲突'))
     expect(hardIssue).toBeDefined()
   })
+
+  it('generates teacher workload and gap issues with exact navigation target info', () => {
+    // 构造李四在周一上 6 节课
+    const fullSlots: TimeSlot[] = [
+      { id: 1, stageId: 2, dayOfWeek: 1, periodIndex: 1, periodName: '第1节', startTime: '08:00', endTime: '08:45', segment: 'morning', isTeaching: true, sortOrder: 1 },
+      { id: 2, stageId: 2, dayOfWeek: 1, periodIndex: 2, periodName: '第2节', startTime: '08:55', endTime: '09:40', segment: 'morning', isTeaching: true, sortOrder: 2 },
+      { id: 3, stageId: 2, dayOfWeek: 1, periodIndex: 3, periodName: '第3节', startTime: '10:00', endTime: '10:45', segment: 'morning', isTeaching: true, sortOrder: 3 },
+      { id: 4, stageId: 2, dayOfWeek: 1, periodIndex: 4, periodName: '第4节', startTime: '10:55', endTime: '11:40', segment: 'morning', isTeaching: true, sortOrder: 4 },
+      { id: 5, stageId: 2, dayOfWeek: 1, periodIndex: 5, periodName: '第5节', startTime: '14:00', endTime: '14:45', segment: 'afternoon', isTeaching: true, sortOrder: 5 },
+      { id: 6, stageId: 2, dayOfWeek: 1, periodIndex: 6, periodName: '第6节', startTime: '14:55', endTime: '15:40', segment: 'afternoon', isTeaching: true, sortOrder: 6 }
+    ]
+    const lessons: Lesson[] = fullSlots.map((s, idx) => ({
+      id: idx + 1,
+      versionId: 10,
+      taskId: 1,
+      classId: 301,
+      subjectId: 2,
+      teacherId: 102,
+      classroomId: 201,
+      slotId: s.id,
+      weekMode: 'all',
+      isLocked: false,
+      consecutiveGroup: null,
+      remark: null
+    }))
+
+    const report = buildHealthReportModel({
+      versionId: 10,
+      versionName: '测试版本 #10',
+      solveMs: 600,
+      hardViolations: 0,
+      lessons,
+      fixedLessons: [],
+      slots: fullSlots,
+      subjects: mockSubjects,
+      teachers: mockTeachers,
+      classrooms: mockClassrooms,
+      classes: mockClasses,
+      grades: mockGrades
+    })
+
+    const teacherLoadIssue = report.issues.find((i) => i.category === 'teacher_load' && i.targetId === 102)
+    expect(teacherLoadIssue).toBeDefined()
+    expect(teacherLoadIssue?.targetView).toBe('teacher')
+    expect(teacherLoadIssue?.targetId).toBe(102)
+    expect(teacherLoadIssue?.targetName).toBe('李四')
+    expect(teacherLoadIssue?.title).toContain('李四')
+  })
 })

@@ -75,11 +75,7 @@ export function TimetablePage(): React.JSX.Element {
   const history = useRef(new AdjustmentHistory(50))
   const currentVersionId = useRef<number | null>(null)
   currentVersionId.current = versionId
-  const pendingRelatedJump = useRef<{
-    view: 'class' | 'teacher'
-    targetId: number
-    stageId: number | null
-  } | null>(null)
+  const activeSidebarItemRef = useRef<HTMLButtonElement | null>(null)
 
   // 处理来自其他页面（如体检报告、导出中心、开始排课）的 URL 跳转参数
   useEffect(() => {
@@ -101,6 +97,7 @@ export function TimetablePage(): React.JSX.Element {
       setStageId(Number(sIdStr))
     }
   }, [searchParams])
+
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
@@ -120,7 +117,13 @@ export function TimetablePage(): React.JSX.Element {
         if (!alive) return
         const sorted = [...rows].sort((a, b) => b.id - a.id)
         setVersions(sorted)
-        setVersionId(sorted[0]?.id ?? null)
+        const vIdParam = searchParams.get('versionId')
+        const targetVId = vIdParam && !isNaN(Number(vIdParam)) ? Number(vIdParam) : null
+        if (targetVId && sorted.some((r) => r.id === targetVId)) {
+          setVersionId(targetVId)
+        } else {
+          setVersionId(sorted[0]?.id ?? null)
+        }
       })
       .catch((e) => toast.error(`读取课表版本失败：${String(e)}`))
     api['fixedLesson:list'](semesterId)
@@ -129,7 +132,7 @@ export function TimetablePage(): React.JSX.Element {
     return () => {
       alive = false
     }
-  }, [semesterId])
+  }, [semesterId, searchParams])
 
   // 版本切换后，旧版本的撤销栈与活动调课对象都不能带到新版本。
   useEffect(() => {
@@ -215,13 +218,18 @@ export function TimetablePage(): React.JSX.Element {
 
   const targetValid =
     targetId != null &&
-    (view === 'class'
-      ? meta.classes.some((c) => c.id === targetId)
-      : view === 'teacher'
-        ? meta.teachers.some((t) => t.id === targetId && t.enabled)
-        : view === 'room'
-          ? meta.classrooms.some((r) => r.id === targetId && r.enabled)
-          : false)
+    (meta.loading ||
+    (view === 'class' && meta.classes.length === 0) ||
+    (view === 'teacher' && meta.teachers.length === 0) ||
+    (view === 'room' && meta.classrooms.length === 0)
+      ? true
+      : view === 'class'
+        ? meta.classes.some((c) => c.id === targetId)
+        : view === 'teacher'
+          ? meta.teachers.some((t) => t.id === targetId && t.enabled)
+          : view === 'room'
+            ? meta.classrooms.some((r) => r.id === targetId && r.enabled)
+            : false)
 
   const resolvedTargetId = targetValid ? targetId : defaultTargetId
 
@@ -269,39 +277,41 @@ export function TimetablePage(): React.JSX.Element {
     setClickAdjustmentLesson(null)
   }, [resolvedTargetId, activeStageId])
 
-  // 视图切换：清掉手选实体 / 手选学段，回到派生默认
+  // 侧栏目标实体选中时，自动滚动至视口内
   useEffect(() => {
-    const jump = pendingRelatedJump.current
-    if (jump?.view === view) {
-      setTargetId(jump.targetId)
-      setStageId(jump.stageId)
-      pendingRelatedJump.current = null
-    } else {
-      setTargetId(null)
-      setStageId(null)
+    if (resolvedTargetId != null && activeSidebarItemRef.current) {
+      activeSidebarItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
+  }, [resolvedTargetId, view])
+
+  const handleViewChange = (newView: TTView): void => {
+    setView(newView)
+    setTargetId(null)
+    setStageId(null)
     setSelected(null)
     setDraggingLesson(null)
     setClickAdjustmentLesson(null)
     setSearch('')
-  }, [view])
+  }
 
   const openRelatedTimetable = (lesson: GridLesson): void => {
     if (view === 'class' && lesson.teacherId != null) {
-      pendingRelatedJump.current = {
-        view: 'teacher',
-        targetId: lesson.teacherId,
-        stageId: lesson.classId != null ? (stageOfClass.get(lesson.classId) ?? null) : null
-      }
+      const nextStageId = lesson.classId != null ? (stageOfClass.get(lesson.classId) ?? null) : null
       setView('teacher')
+      setTargetId(lesson.teacherId)
+      setStageId(nextStageId)
+      setSelected(null)
+      setDraggingLesson(null)
+      setClickAdjustmentLesson(null)
       toast.info('已跳转到该教师课表')
     } else if (view === 'teacher' && lesson.classId != null) {
-      pendingRelatedJump.current = {
-        view: 'class',
-        targetId: lesson.classId,
-        stageId: stageOfClass.get(lesson.classId) ?? null
-      }
+      const nextStageId = lesson.classId != null ? (stageOfClass.get(lesson.classId) ?? null) : null
       setView('class')
+      setTargetId(lesson.classId)
+      setStageId(nextStageId)
+      setSelected(null)
+      setDraggingLesson(null)
+      setClickAdjustmentLesson(null)
       toast.info('已跳转到该班级课表')
     }
   }
@@ -797,7 +807,7 @@ export function TimetablePage(): React.JSX.Element {
             <button
               key={t.key}
               type="button"
-              onClick={() => setView(t.key)}
+              onClick={() => handleViewChange(t.key)}
               className={cn(
                 'rounded-[7px] px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150',
                 view === t.key
@@ -937,6 +947,7 @@ export function TimetablePage(): React.JSX.Element {
                   {g.items.map((it) => (
                     <button
                       key={it.id}
+                      ref={resolvedTargetId === it.id ? activeSidebarItemRef : undefined}
                       type="button"
                       onClick={() => {
                         setTargetId(it.id)
