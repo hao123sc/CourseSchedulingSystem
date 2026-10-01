@@ -16,6 +16,9 @@ import { subjectVars, type GridLesson } from '@renderer/pages/Timetable/timetabl
 export function LessonCard({
   lesson,
   selected,
+  isAdjusting,
+  isSource,
+  canDrop,
   waterfallIndex,
   stack,
   onSelect,
@@ -25,6 +28,9 @@ export function LessonCard({
 }: {
   lesson: GridLesson
   selected: boolean
+  isAdjusting?: boolean
+  isSource?: boolean
+  canDrop?: boolean
   /** 瀑布式淡入的序号（-1 = 不播放动画，如切换班级时重挂载） */
   waterfallIndex: number
   /** 同格多课时的堆叠位置；count=1 或缺省为整格单卡 */
@@ -48,6 +54,8 @@ export function LessonCard({
         compact && 'tt-compact',
         lesson.overlay && !lesson.color && 'tt-dim',
         selected && 'tt-sel',
+        isAdjusting && !isSource && canDrop && 'tt-droppable',
+        isAdjusting && !isSource && !canDrop && 'tt-disabled',
         waterfallIndex >= 0 && 'tt-fall',
         !lesson.locked && !lesson.overlay && onDragStart && 'cursor-grab active:cursor-grabbing'
       )}
@@ -84,7 +92,11 @@ export function LessonCard({
       {span && lesson.blockIndex === 0 && <span className="tt-tag">连堂</span>}
       {!compact && lesson.weekMode === 'odd' && <span className="tt-tag">单</span>}
       {!compact && lesson.weekMode === 'even' && <span className="tt-tag">双</span>}
-      {!compact && lesson.locked && (
+      {!compact && isAdjusting && isSource && <span className="tt-source-tag">调课中</span>}
+      {!compact && isAdjusting && !isSource && canDrop && (
+        <span className="tt-swap-tag">⇄ 对调</span>
+      )}
+      {!compact && !isAdjusting && lesson.locked && (
         <span
           className="tt-lock"
           style={{ right: span || lesson.weekMode !== 'all' ? '26px' : '5px' }}

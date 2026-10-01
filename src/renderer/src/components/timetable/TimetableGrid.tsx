@@ -111,24 +111,28 @@ export function TimetableGrid({
                         isAdjusting && !isCovered && 'cursor-pointer',
                         isSource &&
                           !isCovered &&
-                          'bg-indigo-100/70 ring-2 ring-inset ring-indigo-400 dark:bg-indigo-400/15 dark:ring-indigo-300',
+                          'bg-indigo-100/70 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-400/20 dark:ring-indigo-300',
                         isAdjusting &&
                           !isSource &&
                           !isCovered &&
                           canDrop &&
-                          'bg-emerald-100/70 ring-2 ring-inset ring-emerald-400 dark:bg-emerald-400/15 dark:ring-emerald-300',
+                          items.length === 0 &&
+                          'bg-emerald-100/90 ring-2 ring-inset ring-emerald-500 dark:bg-emerald-950/60 dark:ring-emerald-400',
                         isAdjusting &&
                           !isSource &&
                           !isCovered &&
                           !canDrop &&
-                          'cursor-not-allowed bg-slate-100/60 ring-1 ring-inset ring-slate-300/70 dark:bg-slate-800/50 dark:ring-slate-600/70'
+                          items.length === 0 &&
+                          'cursor-not-allowed bg-slate-100/60 opacity-40 dark:bg-slate-800/50'
                       )}
                       title={
                         isSource
                           ? '当前课程位置；再次单击课程可取消'
                           : isAdjusting && !isCovered
                             ? canDrop
-                              ? '可调入：单击完成调课'
+                              ? items.length > 0
+                                ? '可对调：单击将两门课程互换时段'
+                                : '可移入：单击移入该空闲时段'
                               : '不可调入：存在班级、教师、教室或预排冲突'
                             : undefined
                       }
@@ -150,11 +154,10 @@ export function TimetableGrid({
                           <LessonCard
                             key={l.key}
                             lesson={l}
-                            selected={
-                              adjustmentLesson != null
-                                ? adjustmentLesson.lessonId === l.lessonId
-                                : selected?.key === l.key
-                            }
+                            selected={isAdjusting ? isSource : selected?.key === l.key}
+                            isAdjusting={isAdjusting}
+                            isSource={isSource}
+                            canDrop={canDrop}
                             waterfallIndex={wf}
                             stack={items.length > 1 ? { index: i, count: items.length } : undefined}
                             onSelect={onSelect}
@@ -163,6 +166,10 @@ export function TimetableGrid({
                             onOpenRelated={onOpenRelated}
                           />
                         ))
+                      ) : isAdjusting && canDrop ? (
+                        <div className="flex h-full w-full items-center justify-center rounded-[7px] border-2 border-dashed border-emerald-500/80 bg-emerald-50/70 text-[11.5px] font-bold text-emerald-700 transition-transform duration-150 hover:scale-[1.03] dark:bg-emerald-950/40 dark:text-emerald-300">
+                          ➜ 移入
+                        </div>
                       ) : isGap ? (
                         <div className="tt-gap" title="空隙课" />
                       ) : view === 'teacher' ? (
