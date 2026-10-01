@@ -21,12 +21,13 @@ export function TimetableGrid({
   selected,
   onSelect,
   waterfall,
-  draggingLesson,
+  adjustmentLesson,
   dropSlots,
   onDragStart,
   onDragEnd,
   onOpenRelated,
-  onDrop
+  onDrop,
+  onSlotClick
 }: {
   axis: SlotAxis
   grid: ClassGrid
@@ -35,13 +36,15 @@ export function TimetableGrid({
   selected: GridLesson | null
   onSelect: (l: GridLesson) => void
   waterfall: boolean
-  draggingLesson?: GridLesson | null
-  /** 拖拽中的可落点；未包含的格子会以不可用状态显示 */
+  /** 拖拽或单击调课中的活动课程；两种交互共用落点高亮。 */
+  adjustmentLesson?: GridLesson | null
+  /** 可落点；未包含的格子会以禁用/冲突状态显示。 */
   dropSlots?: Set<number> | null
   onDragStart?: (lesson: GridLesson, event: React.DragEvent<HTMLDivElement>) => void
   onDragEnd?: () => void
   onOpenRelated?: (lesson: GridLesson) => void
   onDrop?: (slotId: number) => void
+  onSlotClick?: (slotId: number) => void
 }): React.JSX.Element {
   const today = todayHighlight(axis.days)
   const periodRows = buildPeriodRows(axis)
@@ -94,26 +97,52 @@ export function TimetableGrid({
                   const isCovered = grid.covered.has(sid)
                   const isGap = view === 'teacher' && gapSlots.has(sid)
                   const wf = waterfall && items.length > 0 ? seq++ : -1
-                  const isDropTarget = draggingLesson != null && dropSlots != null
-                  const canDrop = isDropTarget && dropSlots.has(sid)
+                  const isAdjusting = adjustmentLesson != null && dropSlots != null
+                  const canDrop = isAdjusting && dropSlots.has(sid)
+                  const isSource =
+                    isAdjusting &&
+                    adjustmentLesson.lessonId != null &&
+                    adjustmentLesson.slotId === sid
                   return (
                     <td
                       key={d}
                       className={cn(
                         'tt-cell transition-colors duration-150',
-                        isDropTarget && !isCovered && canDrop && 'bg-emerald-100/70 ring-2 ring-inset ring-emerald-400 dark:bg-emerald-400/15 dark:ring-emerald-300',
-                        isDropTarget && !isCovered && !canDrop && 'bg-slate-100/60 ring-1 ring-inset ring-slate-300/70 dark:bg-slate-800/50 dark:ring-slate-600/70'
+                        isAdjusting && !isCovered && 'cursor-pointer',
+                        isSource &&
+                          !isCovered &&
+                          'bg-indigo-100/70 ring-2 ring-inset ring-indigo-400 dark:bg-indigo-400/15 dark:ring-indigo-300',
+                        isAdjusting &&
+                          !isSource &&
+                          !isCovered &&
+                          canDrop &&
+                          'bg-emerald-100/70 ring-2 ring-inset ring-emerald-400 dark:bg-emerald-400/15 dark:ring-emerald-300',
+                        isAdjusting &&
+                          !isSource &&
+                          !isCovered &&
+                          !canDrop &&
+                          'cursor-not-allowed bg-slate-100/60 ring-1 ring-inset ring-slate-300/70 dark:bg-slate-800/50 dark:ring-slate-600/70'
                       )}
-                      title={isDropTarget && !isCovered ? (canDrop ? '可以放置' : '存在班级、教师或教室冲突') : undefined}
+                      title={
+                        isSource
+                          ? '当前课程位置；再次单击课程可取消'
+                          : isAdjusting && !isCovered
+                            ? canDrop
+                              ? '可调入：单击完成调课'
+                              : '不可调入：存在班级、教师、教室或预排冲突'
+                            : undefined
+                      }
+                      onClick={() => {
+                        if (isAdjusting && !isCovered) onSlotClick?.(sid)
+                      }}
                       onDragOver={(event) => {
-                        // 允许浏览器把 drop 事件交给页面，最终仍由 handleDrop
-                        // 用最新 lessons 再校验一次，避免拖动多次后高亮状态短暂滞后导致
-                        // 合法的「拖回原位置」无法落点。
-                        if (draggingLesson && !isCovered) event.preventDefault()
+                        // 允许浏览器把 drop 事件交给页面，最终仍由 onDrop
+                        // 用最新 lessons 再校验一次，避免高亮状态短暂滞后。
+                        if (adjustmentLesson && !isCovered) event.preventDefault()
                       }}
                       onDrop={(event) => {
                         event.preventDefault()
-                        if (draggingLesson && !isCovered && sid != null) onDrop?.(sid)
+                        if (adjustmentLesson && !isCovered) onDrop?.(sid)
                       }}
                     >
                       {isCovered ? null : items.length > 0 ? (
@@ -121,7 +150,9 @@ export function TimetableGrid({
                           <LessonCard
                             key={l.key}
                             lesson={l}
-                            selected={selected?.key === l.key}
+                            selected={
+                              selected?.key === l.key || adjustmentLesson?.lessonId === l.lessonId
+                            }
                             waterfallIndex={wf}
                             stack={items.length > 1 ? { index: i, count: items.length } : undefined}
                             onSelect={onSelect}

@@ -1573,8 +1573,9 @@ export function loadFullSchoolPreset(): PresetLoadResult {
       starts: index === 0 ? 8 : 4,
       timeBudgetMs: 30_000,
       seed: 20261001 + index * 7919,
-      // 均衡版先守住零冲突基线；另外两版开启质量阶段，真实使用各自权重与不同种子。
-      qualityOptimize: index > 0
+      // 三个版本都启用构造期软偏好与质量精修；S16 会优先填充各班每日第一节，
+      // 但仍由硬约束门禁兜底，不会为了消除首节空堂制造冲突。
+      qualityOptimize: true
     })
     if (index === 0 && !isGolden(candidate)) {
       throw new Error(`全功能预设未得到黄金课表：${failureDetail(candidate)}`)

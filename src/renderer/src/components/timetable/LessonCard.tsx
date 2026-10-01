@@ -10,7 +10,8 @@ import { subjectVars, type GridLesson } from '@renderer/pages/Timetable/timetabl
  * 同格多课（多并发场地的教室视图，如田径场 4 班同时上体育）走紧凑堆叠：
  * 每张占格子高度的 1/N，只显示「学科 班级」单行。
  *
- * 拖拽 / 落点着色 / 换课建议是 M6 交互调整的内容，这里只保留选中态。
+ * M6 同时支持拖拽与单击调课；卡片点击由页面决定是进入调课、取消，还是尝试
+ * 落到当前课程所在格。这里阻止事件冒泡，避免卡片和格子各处理一次。
  */
 export function LessonCard({
   lesson,
@@ -63,12 +64,22 @@ export function LessonCard({
           : {}),
         ...(waterfallIndex >= 0 ? { animationDelay: `${Math.min(waterfallIndex, 40) * 24}ms` } : {})
       }}
-      title={lesson.title + (lesson.meta ? ` · ${lesson.meta}` : '') + (onOpenRelated && !lesson.overlay ? ' · 双击跳转关联课表' : '')}
+      title={
+        lesson.title +
+        (lesson.meta ? ` · ${lesson.meta}` : '') +
+        (onOpenRelated && !lesson.overlay ? ' · 双击跳转关联课表' : '')
+      }
       draggable={Boolean(onDragStart && !lesson.locked && !lesson.overlay)}
       onDragStart={(event) => onDragStart?.(lesson, event)}
       onDragEnd={onDragEnd}
-      onDoubleClick={() => onOpenRelated?.(lesson)}
-      onClick={() => onSelect?.(lesson)}
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        onOpenRelated?.(lesson)
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelect?.(lesson)
+      }}
     >
       {span && lesson.blockIndex === 0 && <span className="tt-tag">连堂</span>}
       {!compact && lesson.weekMode === 'odd' && <span className="tt-tag">单</span>}

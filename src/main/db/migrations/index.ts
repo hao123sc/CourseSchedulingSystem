@@ -5,6 +5,7 @@ import seed004 from './004_seed_weights.sql?raw'
 import m2005 from './005_m2_rules.sql?raw'
 import m006 from './006_fixed_lesson_kind.sql?raw'
 import m007 from './007_adjust_log_index.sql?raw'
+import m008 from './008_first_period_weight.sql?raw'
 
 export interface Migration {
   /** 单调递增的版本号，与文件名前缀一致，写入 schema_version */
@@ -63,5 +64,6 @@ export const MIGRATIONS: Migration[] = [
     name: '007_adjust_log_index',
     sql: m007,
     verify: (db) => hasIndex(db, 'ix_adjust_log_version_created')
-  }
+  },
+  { version: 8, name: '008_first_period_weight', sql: m008 }
 ]

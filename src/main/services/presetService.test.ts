@@ -162,6 +162,43 @@ describe('M8 · 预设示范数据与一键体验', () => {
       false,
       false
     ])
+
+    // 240 班 × 5 天 = 1200 个班级日。S16 是软约束，不强求绝对为零；三个
+    // 档位都必须把首节空堂控制在 1% 以内。早读不算“第1节”。
+    const firstPeriodGaps = db
+      .prepare(
+        `WITH first_slots AS (
+           SELECT id, stage_id, day_of_week FROM time_slot WHERE period_name='第1节'
+         ), classes AS (
+           SELECT k.id class_id, g.stage_id FROM klass k JOIN grade g ON g.id=k.grade_id
+            WHERE g.semester_id=?
+         ), expected AS (
+           SELECT v.id version_id, c.class_id, fs.day_of_week
+             FROM schedule_version v JOIN classes c
+             JOIN first_slots fs ON fs.stage_id=c.stage_id
+            WHERE v.semester_id=?
+         ), occupied AS (
+           SELECT l.version_id, l.class_id, ts.day_of_week
+             FROM lesson l JOIN time_slot ts ON ts.id=l.slot_id
+            WHERE ts.period_name='第1节'
+           UNION
+           SELECT v.id, k.id, ts.day_of_week
+             FROM schedule_version v
+             JOIN fixed_lesson f ON f.semester_id=v.semester_id
+             JOIN time_slot ts ON ts.id=f.slot_id AND ts.period_name='第1节'
+             JOIN klass k ON (k.id=f.class_id OR (f.class_id IS NULL AND k.grade_id=f.grade_id))
+            WHERE f.kind='lesson'
+         )
+         SELECT e.version_id, SUM(CASE WHEN o.class_id IS NULL THEN 1 ELSE 0 END) gaps
+           FROM expected e LEFT JOIN occupied o
+             ON o.version_id=e.version_id AND o.class_id=e.class_id
+            AND o.day_of_week=e.day_of_week
+          GROUP BY e.version_id ORDER BY e.version_id`
+      )
+      .all(res.semesterId, res.semesterId) as { version_id: number; gaps: number }[]
+    expect(firstPeriodGaps).toHaveLength(3)
+    expect(firstPeriodGaps.every((row) => row.gaps <= 10)).toBe(true)
+
     expect(
       scalar(
         `SELECT MIN(n) n FROM (

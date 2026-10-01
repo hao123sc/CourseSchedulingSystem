@@ -69,7 +69,8 @@ describe.skipIf(!nativeOk)('M1 数据层 · 迁移 + 种子 + Repository', () =>
     )
     const balanced = profiles.find((p) => p.code === 'balanced')!
     expect(balanced.payload.S1).toBe(40)
-    expect(Object.keys(balanced.payload)).toHaveLength(15)
+    expect(balanced.payload.S16).toBe(200)
+    expect(Object.keys(balanced.payload)).toHaveLength(16)
   })
 
   it('学校单例 upsert', () => {

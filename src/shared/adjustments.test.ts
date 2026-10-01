@@ -1,18 +1,67 @@
 import { describe, expect, it } from 'vitest'
-import { AdjustmentHistory, createAdjustmentCommand, detectAdjustmentConflicts, type AdjustmentLesson } from './adjustments'
+import {
+  AdjustmentHistory,
+  createAdjustmentCommand,
+  detectAdjustmentConflicts,
+  validAdjustmentTargets,
+  type AdjustmentLesson
+} from './adjustments'
 
 const lessons: AdjustmentLesson[] = [
-  { id: 1, classId: 10, teacherId: 20, classroomId: 30, slotId: 1, isLocked: false, consecutiveGroup: null },
-  { id: 2, classId: 11, teacherId: 21, classroomId: 31, slotId: 2, isLocked: false, consecutiveGroup: null },
-  { id: 3, classId: 12, teacherId: 20, classroomId: 32, slotId: 2, isLocked: false, consecutiveGroup: null },
-  { id: 4, classId: 13, teacherId: 22, classroomId: 33, slotId: 4, isLocked: true, consecutiveGroup: null }
+  {
+    id: 1,
+    classId: 10,
+    teacherId: 20,
+    classroomId: 30,
+    slotId: 1,
+    isLocked: false,
+    consecutiveGroup: null
+  },
+  {
+    id: 2,
+    classId: 11,
+    teacherId: 21,
+    classroomId: 31,
+    slotId: 2,
+    isLocked: false,
+    consecutiveGroup: null
+  },
+  {
+    id: 3,
+    classId: 12,
+    teacherId: 20,
+    classroomId: 32,
+    slotId: 2,
+    isLocked: false,
+    consecutiveGroup: null
+  },
+  {
+    id: 4,
+    classId: 13,
+    teacherId: 22,
+    classroomId: 33,
+    slotId: 4,
+    isLocked: true,
+    consecutiveGroup: null
+  }
 ]
 
 describe('M6 local adjustments', () => {
   it('detects class, teacher and locked conflicts locally', () => {
-    expect(detectAdjustmentConflicts(lessons, { lessonId: 1, fromSlotId: 1, toSlotId: 2 }).map((x) => x.code)).toEqual(['TEACHER'])
-    expect(detectAdjustmentConflicts(lessons, { lessonId: 4, fromSlotId: 4, toSlotId: 1 })[0].code).toBe('LOCKED')
+    expect(
+      detectAdjustmentConflicts(lessons, { lessonId: 1, fromSlotId: 1, toSlotId: 2 }).map(
+        (x) => x.code
+      )
+    ).toEqual(['TEACHER'])
+    expect(
+      detectAdjustmentConflicts(lessons, { lessonId: 4, fromSlotId: 4, toSlotId: 1 })[0].code
+    ).toBe('LOCKED')
   })
+  it('uses the same conflict rules to calculate highlighted targets', () => {
+    expect([...validAdjustmentTargets(lessons, 1, [1, 2, 3, 4, 5])]).toEqual([3, 4, 5])
+    expect(validAdjustmentTargets(lessons, 4, [1, 2, 3, 4, 5]).size).toBe(0)
+  })
+
   it('supports 50-step undo and redo semantics', () => {
     const current = lessons.map((lesson) => ({ ...lesson }))
     const history = new AdjustmentHistory(50)

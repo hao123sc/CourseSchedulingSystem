@@ -15,6 +15,7 @@
  */
 import type { SolverContext } from './context'
 import { Board } from './board'
+import { firstFormalSlotIds, stageDayKey } from './formalPeriods'
 import type { Rng } from './random'
 
 export interface ConstructResult {
@@ -79,6 +80,15 @@ export function construct(
   const teacherDay = new Map<string, number>()
   const teacherDayPeriods = new Map<string, number[]>()
   const classSubjectDay = new Map<string, number>()
+  const firstSlots = firstFormalSlotIds(ctx.slots)
+  const firstSlotIdSet = new Set(firstSlots.values())
+  const classDayFirstFilled = new Set<string>()
+  for (const fixedLesson of ctx.fixedPlacements) {
+    if (!firstSlotIdSet.has(fixedLesson.slotId)) continue
+    const si = ctx.slotIdx.get(fixedLesson.slotId)
+    if (si == null) continue
+    classDayFirstFilled.add(`${fixedLesson.classId}:${ctx.slots[si].dayOfWeek}`)
+  }
   for (const u of units)
     for (const wid of domains[u.id]) for (const si of ctx.windows[wid]) slotDemand[si] += 1
   const dropDemand = (unitId: number): void => {
@@ -154,8 +164,9 @@ export function construct(
       let score = 0
       for (const si of ctx.windows[wid]) score += slotDemand[si]
       // 事实连堂罚分（2026-09-30 用户要求）：没配置连堂的课绝不与同班同学科挨着，
-      // 除非整个值域只剩挨着的落点。1000/次的量级远超 slotDemand，保证优先级。
-      score += board.sameSubjectContacts(u, ctx.windows[wid]) * 1000
+      // 除非整个值域只剩挨着的落点。S16 又加入了首节填充奖励，因此把这一项提升
+      // 到 10000/次，继续保证“零事实连堂”优先于全部构造期软偏好。
+      score += board.sameSubjectContacts(u, ctx.windows[wid]) * 10_000
       if (softOptimize) {
         const days = new Set(ctx.windows[wid].map(dayOf))
         for (const day of days) {
@@ -173,9 +184,15 @@ export function construct(
               score += (max - min + 1 - new Set(periods).size) * 120
             }
           }
+          const firstSlotId = firstSlots.get(stageDayKey(u.stageId, day))
+          const fillsFirst =
+            firstSlotId != null && ctx.windows[wid].some((si) => ctx.slots[si].id === firstSlotId)
           for (const classId of u.classIds) {
             const n = classSubjectDay.get(classSubjectDayKey(classId, u.subjectId, day)) ?? 0
             score += n * n * 60
+            // 班级当天第一节空堂（S16）给显著构造期惩罚。用“填第一节”的奖励
+            // 实现，既不把它升级成硬约束，也不会在受限课表中制造无解。
+            if (fillsFirst && !classDayFirstFilled.has(`${classId}:${day}`)) score -= 300
           }
           if (
             u.importance >= 4 &&
@@ -204,9 +221,14 @@ export function construct(
           }
           teacherDayPeriods.set(k, periods)
         }
+        const firstSlotId = firstSlots.get(stageDayKey(u.stageId, day))
+        const fillsFirst =
+          firstSlotId != null &&
+          ctx.windows[best.wid].some((si) => ctx.slots[si].id === firstSlotId)
         for (const classId of u.classIds) {
           const k = classSubjectDayKey(classId, u.subjectId, day)
           classSubjectDay.set(k, (classSubjectDay.get(k) ?? 0) + u.size)
+          if (fillsFirst) classDayFirstFilled.add(`${classId}:${day}`)
         }
       }
     dropDemand(u.id)

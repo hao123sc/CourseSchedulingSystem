@@ -153,7 +153,7 @@ export interface SolverInput {
   semesterName: string
   /** 生成时间，便于比对快照新鲜度 */
   generatedAt: string
-  /** 软约束权重档位（S1..S15） */
+  /** 软约束权重档位（S1..S16） */
   weightProfileCode: string
   weights: Record<string, number>
 

@@ -29,7 +29,8 @@ export function detectAdjustmentConflicts(
   proposal: AdjustmentProposal
 ): AdjustmentConflict[] {
   const moving = lessons.find((lesson) => lesson.id === proposal.lessonId)
-  if (!moving) return [{ code: 'CLASS', lessonIds: [proposal.lessonId], message: '找不到要调整的课程' }]
+  if (!moving)
+    return [{ code: 'CLASS', lessonIds: [proposal.lessonId], message: '找不到要调整的课程' }]
   if (moving.isLocked) {
     return [{ code: 'LOCKED', lessonIds: [moving.id], message: '预排锁定课程不可移动' }]
   }
@@ -37,16 +38,52 @@ export function detectAdjustmentConflicts(
   for (const lesson of lessons) {
     if (lesson.id === moving.id || lesson.slotId !== proposal.toSlotId) continue
     if (lesson.classId === moving.classId) {
-      conflicts.push({ code: 'CLASS', lessonIds: [moving.id, lesson.id], message: '同一班级在该时段已有课程' })
+      conflicts.push({
+        code: 'CLASS',
+        lessonIds: [moving.id, lesson.id],
+        message: '同一班级在该时段已有课程'
+      })
     }
     if (moving.teacherId != null && lesson.teacherId === moving.teacherId) {
-      conflicts.push({ code: 'TEACHER', lessonIds: [moving.id, lesson.id], message: '该教师在该时段已有课程' })
+      conflicts.push({
+        code: 'TEACHER',
+        lessonIds: [moving.id, lesson.id],
+        message: '该教师在该时段已有课程'
+      })
     }
     if (moving.classroomId != null && lesson.classroomId === moving.classroomId) {
-      conflicts.push({ code: 'ROOM', lessonIds: [moving.id, lesson.id], message: '该教室在该时段已有课程' })
+      conflicts.push({
+        code: 'ROOM',
+        lessonIds: [moving.id, lesson.id],
+        message: '该教室在该时段已有课程'
+      })
     }
   }
   return conflicts
+}
+
+/**
+ * 用和实际落点完全相同的冲突检测批量计算可调目标，供拖拽与单击高亮共用。
+ * 原位置不是“移动目标”；单击源课程由交互层解释为取消调课。
+ */
+export function validAdjustmentTargets(
+  lessons: readonly AdjustmentLesson[],
+  lessonId: number,
+  slotIds: readonly number[]
+): Set<number> {
+  const moving = lessons.find((lesson) => lesson.id === lessonId)
+  if (!moving || moving.isLocked) return new Set()
+  return new Set(
+    slotIds.filter(
+      (slotId) =>
+        slotId !== moving.slotId &&
+        detectAdjustmentConflicts(lessons, {
+          lessonId,
+          fromSlotId: moving.slotId,
+          toSlotId: slotId
+        }).length === 0
+    )
+  )
 }
 
 export interface AdjustmentCommand {
@@ -95,8 +132,16 @@ export class AdjustmentHistory {
     this.undoStack.push(command)
     return true
   }
-  get canUndo(): boolean { return this.undoStack.length > 0 }
-  get canRedo(): boolean { return this.redoStack.length > 0 }
-  get nextUndo(): AdjustmentCommand | null { return this.undoStack[this.undoStack.length - 1] ?? null }
-  get nextRedo(): AdjustmentCommand | null { return this.redoStack[this.redoStack.length - 1] ?? null }
+  get canUndo(): boolean {
+    return this.undoStack.length > 0
+  }
+  get canRedo(): boolean {
+    return this.redoStack.length > 0
+  }
+  get nextUndo(): AdjustmentCommand | null {
+    return this.undoStack[this.undoStack.length - 1] ?? null
+  }
+  get nextRedo(): AdjustmentCommand | null {
+    return this.redoStack[this.redoStack.length - 1] ?? null
+  }
 }

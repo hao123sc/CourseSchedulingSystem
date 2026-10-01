@@ -94,7 +94,11 @@ describe.skipIf(!nativeOk)('迁移执行器', () => {
     ).run()
 
     const r = runMigrations(db as never)
-    expect(r.applied).toEqual(['006_fixed_lesson_kind', '007_adjust_log_index'])
+    expect(r.applied).toEqual([
+      '006_fixed_lesson_kind',
+      '007_adjust_log_index',
+      '008_first_period_weight'
+    ])
     expect(r.repaired).toEqual([])
     expect(db.prepare('SELECT kind, label FROM fixed_lesson').all()).toEqual([
       { kind: 'lesson', label: '历史班会' }

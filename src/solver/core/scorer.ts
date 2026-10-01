@@ -6,6 +6,7 @@
  */
 import type { SolverContext } from './context'
 import { countAccidentalBlocks } from './adjacency'
+import { firstFormalSlotIds, stageDayKey } from './formalPeriods'
 import type { Assignment, Solution } from '../model/solution'
 
 export const SOFT_CODES = [
@@ -23,7 +24,8 @@ export const SOFT_CODES = [
   'S12',
   'S13',
   'S14',
-  'S15'
+  'S15',
+  'S16'
 ] as const
 export type SoftCode = (typeof SOFT_CODES)[number]
 export type ScoreBreakdown = Record<SoftCode, number>
@@ -276,6 +278,35 @@ export function scoreSolution(
     return (cache.roomUse.get(room.id) ?? 0) / totalSlots
   })
   metrics.S15 = stddev(rates)
+
+  // S16：班级当天有正课，但第一节正课为空。早读/晨读/晚自习不冒充“第1节”。
+  // 预排课不在 solution.assignments 中，必须和普通排课一起计入占用，否则已钉死
+  // 在第一节的班会/课程仍会被误罚。
+  const firstSlots = firstFormalSlotIds(ctx.slots)
+  const occupiedClassSlots = new Set<string>()
+  const usedClassDays = new Set<string>()
+  for (const point of points) {
+    const slot = ctx.slots[point.slotIdx]
+    if (!slot) continue
+    occupiedClassSlots.add(key(point.classId, slot.id))
+    usedClassDays.add(key(point.classId, slot.dayOfWeek))
+  }
+  for (const fixedLesson of ctx.fixedPlacements) {
+    const slot = ctx.slots[ctx.slotIdx.get(fixedLesson.slotId) ?? -1]
+    if (!slot) continue
+    occupiedClassSlots.add(key(fixedLesson.classId, fixedLesson.slotId))
+    const firstSlotId = firstSlots.get(stageDayKey(slot.stageId, slot.dayOfWeek))
+    // 无学科的早读只是一项非正课活动，不单独触发“当天有正课”。
+    if (fixedLesson.subjectId != null || fixedLesson.slotId === firstSlotId)
+      usedClassDays.add(key(fixedLesson.classId, slot.dayOfWeek))
+  }
+  for (const cls of ctx.input.classes) {
+    for (const [stageDay, firstSlotId] of firstSlots) {
+      const [stageId, day] = stageDay.split(':').map(Number)
+      if (stageId !== cls.stageId || !usedClassDays.has(key(cls.id, day))) continue
+      if (!occupiedClassSlots.has(key(cls.id, firstSlotId))) metrics.S16++
+    }
+  }
 
   const breakdown = { ...metrics }
   const total = SOFT_CODES.reduce((sum, code) => sum + (weights[code] ?? 0) * breakdown[code], 0)
