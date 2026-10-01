@@ -379,28 +379,105 @@ export function writeOverviewWorksheet(ws: ExcelJS.Worksheet, data: OverviewExpo
   }
 }
 
+/** 校验并提取图像二进制数据（支持 Uint8Array、ArrayBuffer、Buffer 以及安全 Base64 格式） */
+export function validateAndConvertImageBuffer(payload: {
+  buffer?: Uint8Array | ArrayBuffer | number[]
+  base64Data?: string
+}): { buffer: Buffer | null; error?: string } {
+  let fileBuffer: Buffer | null = null
+
+  if (payload.buffer) {
+    if (payload.buffer instanceof Uint8Array || Buffer.isBuffer(payload.buffer)) {
+      fileBuffer = Buffer.from(payload.buffer)
+    } else if (payload.buffer instanceof ArrayBuffer) {
+      fileBuffer = Buffer.from(new Uint8Array(payload.buffer))
+    } else if (Array.isArray(payload.buffer)) {
+      fileBuffer = Buffer.from(payload.buffer)
+    }
+  } else if (payload.base64Data) {
+    const raw = payload.base64Data.trim()
+    if (raw === 'data:,' || raw.length < 50) {
+      return {
+        buffer: null,
+        error: '图像数据为空（Canvas 导出超限或未完成渲染），请调低倍率或选择 JPEG 格式导出'
+      }
+    }
+    const cleanBase64 = raw.replace(/^data:image\/\w+;base64,/, '')
+    try {
+      fileBuffer = Buffer.from(cleanBase64, 'base64')
+    } catch {
+      return { buffer: null, error: 'Base64 图像解码失败' }
+    }
+  }
+
+  if (!fileBuffer || fileBuffer.length < 64) {
+    return {
+      buffer: null,
+      error: '图像数据为空或字节数不足，无法生成有效图片文件'
+    }
+  }
+
+  // 严格检验图片文件头（PNG / JPEG）
+  const isPngHeader =
+    fileBuffer.length >= 8 &&
+    fileBuffer[0] === 0x89 &&
+    fileBuffer[1] === 0x50 &&
+    fileBuffer[2] === 0x4e &&
+    fileBuffer[3] === 0x47
+  const isJpgHeader =
+    fileBuffer.length >= 3 &&
+    fileBuffer[0] === 0xff &&
+    fileBuffer[1] === 0xd8 &&
+    fileBuffer[2] === 0xff
+
+  if (!isPngHeader && !isJpgHeader) {
+    return {
+      buffer: null,
+      error: '生成的图片文件头格式校验失败，非有效的 PNG 或 JPEG 图像'
+    }
+  }
+
+  return { buffer: fileBuffer }
+}
+
 /** 保存大幅面海报图片文件（供广告公司大型喷绘张贴） */
 export async function savePosterImage(payload: {
   defaultName: string
-  base64Data: string
-}): Promise<{ canceled: boolean; filePath: string | null }> {
+  base64Data?: string
+  buffer?: Uint8Array | number[]
+  mimeType?: string
+}): Promise<{ canceled: boolean; filePath: string | null; error?: string }> {
+  const validation = validateAndConvertImageBuffer(payload)
+  if (!validation.buffer) {
+    return { canceled: false, filePath: null, error: validation.error || '图像数据无效' }
+  }
+
   const win = focused()
+  const isJpeg =
+    payload.mimeType?.includes('jpeg') ||
+    payload.mimeType?.includes('jpg') ||
+    payload.defaultName.toLowerCase().endsWith('.jpg') ||
+    payload.defaultName.toLowerCase().endsWith('.jpeg')
+
+  const filters = isJpeg
+    ? [
+        { name: 'JPEG 高清大图 (*.jpg;*.jpeg)', extensions: ['jpg', 'jpeg'] },
+        { name: 'PNG 广告喷绘图片 (*.png)', extensions: ['png'] }
+      ]
+    : [
+        { name: 'PNG 广告喷绘图片 (*.png)', extensions: ['png'] },
+        { name: 'JPEG 高清大图 (*.jpg;*.jpeg)', extensions: ['jpg', 'jpeg'] }
+      ]
+
   const { canceled, filePath } = await dialog.showSaveDialog(win!, {
     title: '保存大幅面海报图片（广告公司打印）',
     defaultPath: payload.defaultName.replace(/[\\/:*?"<>|]/g, '_'),
-    filters: [
-      { name: 'PNG 高清图片 (*.png)', extensions: ['png'] },
-      { name: 'JPEG 图片 (*.jpg;*.jpeg)', extensions: ['jpg', 'jpeg'] }
-    ]
+    filters
   })
 
   if (canceled || !filePath) return { canceled: true, filePath: null }
 
-  // 清洗 base64 前缀
-  const base64Image = payload.base64Data.replace(/^data:image\/\w+;base64,/, '')
-  const buffer = Buffer.from(base64Image, 'base64')
-  fs.writeFileSync(filePath, buffer)
-
+  fs.writeFileSync(filePath, validation.buffer)
   return { canceled: false, filePath }
 }
 

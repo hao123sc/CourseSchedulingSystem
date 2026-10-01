@@ -1,8 +1,10 @@
 import type { OverviewExportSheet } from '@shared/timetableExport'
 
 export interface PosterOptions {
-  scale?: number // 1, 2, 3, 4
+  scale?: number // 1, 1.5, 2, 3, 4
   theme?: 'modern' | 'blue' | 'classic'
+  format?: 'png' | 'jpeg'
+  jpegQuality?: number
   customTitle?: string
   customSubTitle?: string
   showLegend?: boolean
@@ -16,6 +18,17 @@ export interface PosterRenderResult {
   height: number
   scale: number
   estimatedPrintSize: string
+}
+
+export interface PosterExportBinaryResult {
+  buffer: Uint8Array
+  width: number
+  height: number
+  scale: number
+  actualScale: number
+  mimeType: string
+  estimatedPrintSize: string
+  sizeBytes: number
 }
 
 const THEME_COLORS = {
@@ -60,24 +73,34 @@ const THEME_COLORS = {
   }
 }
 
-/**
- * 离屏高分辨率 Canvas 绘制全校总课表海报
- * 支持 1x ~ 4x (300 DPI 超高清)，专为广告公司大幅面喷绘张贴打造
- */
-export async function renderCampusOverviewPoster(
+/** 计算排版基础度量尺寸与安全缩放系数 */
+export function calculatePosterMetrics(
   sheet: OverviewExportSheet,
-  options: PosterOptions = {}
-): Promise<PosterRenderResult> {
-  const scale = options.scale ?? 2
-  const theme = THEME_COLORS[options.theme ?? 'modern']
+  options: PosterOptions = {},
+  requestedScale = 2
+): {
+  paddingX: number
+  headerHeight: number
+  dayColWidth: number
+  periodColWidth: number
+  classColWidth: number
+  classCount: number
+  gradeHeaderHeight: number
+  classHeaderHeight: number
+  rowHeight: number
+  dividerHeight: number
+  legendHeight: number
+  signatureHeight: number
+  totalWidthBase: number
+  totalHeightBase: number
+  actualScale: number
+  widthPx: number
+  heightPx: number
+  estimatedPrintSize: string
+} {
   const showLegend = options.showLegend ?? true
   const showSignatures = options.showSignatures ?? true
-  const signatoryText = options.signatoryText || '教务处制表：________________    分管校长审批：________________    公布日期：2026年___月___日'
 
-  const title = options.customTitle || sheet.title || '全校总课程表'
-  const subTitle = options.customSubTitle || sheet.subTitle || ''
-
-  // 基础度量尺寸 (1x 下的值，绘制时乘以 scale)
   const paddingX = 30
   const headerHeight = 110
   const dayColWidth = 65
@@ -93,7 +116,6 @@ export async function renderCampusOverviewPoster(
 
   const totalWidthBase = paddingX * 2 + dayColWidth + periodColWidth + classCount * classColWidth
 
-  // 计算行数与总高度
   let rowsHeightBase = 0
   sheet.rows.forEach((r) => {
     if (r.dividerBefore) rowsHeightBase += dividerHeight
@@ -109,17 +131,97 @@ export async function renderCampusOverviewPoster(
     signatureHeight +
     40
 
-  const canvas = document.createElement('canvas')
-  const width = Math.round(totalWidthBase * scale)
-  const height = Math.round(totalHeightBase * scale)
+  // 安全防溢出：单边不超过 10000 像素，总像素不超过 4500 万像素（保证 GPU/内存极度稳定）
+  const MAX_DIMENSION = 10000
+  const MAX_PIXELS = 45_000_000
 
-  canvas.width = width
-  canvas.height = height
+  let actualScale = requestedScale
+  if (totalWidthBase * actualScale > MAX_DIMENSION) {
+    actualScale = Math.min(actualScale, MAX_DIMENSION / totalWidthBase)
+  }
+  if (totalHeightBase * actualScale > MAX_DIMENSION) {
+    actualScale = Math.min(actualScale, MAX_DIMENSION / totalHeightBase)
+  }
+  const totalPixels = totalWidthBase * totalHeightBase * actualScale * actualScale
+  if (totalPixels > MAX_PIXELS) {
+    actualScale = Math.min(actualScale, Math.sqrt(MAX_PIXELS / (totalWidthBase * totalHeightBase)))
+  }
+  actualScale = Math.max(0.8, Number(actualScale.toFixed(2)))
+
+  const widthPx = Math.round(totalWidthBase * actualScale)
+  const heightPx = Math.round(totalHeightBase * actualScale)
+
+  // 物理尺寸估算 (以标准 150~300 DPI 计算)
+  const dpi = requestedScale >= 3 ? 300 : requestedScale >= 2 ? 150 : 96
+  const cmWidth = ((widthPx / dpi) * 2.54).toFixed(1)
+  const cmHeight = ((heightPx / dpi) * 2.54).toFixed(1)
+  const estimatedPrintSize = `${cmWidth} cm × ${cmHeight} cm (${dpi} DPI 喷绘展板)`
+
+  return {
+    paddingX,
+    headerHeight,
+    dayColWidth,
+    periodColWidth,
+    classColWidth,
+    classCount,
+    gradeHeaderHeight,
+    classHeaderHeight,
+    rowHeight,
+    dividerHeight,
+    legendHeight,
+    signatureHeight,
+    totalWidthBase,
+    totalHeightBase,
+    actualScale,
+    widthPx,
+    heightPx,
+    estimatedPrintSize
+  }
+}
+
+/** 绘制海报到位图 Canvas */
+export function drawPosterCanvas(
+  sheet: OverviewExportSheet,
+  options: PosterOptions = {},
+  requestedScale = 2
+): {
+  canvas: HTMLCanvasElement
+  metrics: ReturnType<typeof calculatePosterMetrics>
+} {
+  const metrics = calculatePosterMetrics(sheet, options, requestedScale)
+  const theme = THEME_COLORS[options.theme ?? 'modern']
+  const showLegend = options.showLegend ?? true
+  const showSignatures = options.showSignatures ?? true
+  const signatoryText =
+    options.signatoryText ||
+    '教务处制表：________________    分管校长审批：________________    公布日期：2026年___月___日'
+
+  const title = options.customTitle || sheet.title || '全校总课程表'
+  const subTitle = options.customSubTitle || sheet.subTitle || ''
+
+  const canvas = document.createElement('canvas')
+  canvas.width = metrics.widthPx
+  canvas.height = metrics.heightPx
 
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('无法创建 Canvas 2D 绘图上下文')
 
-  ctx.scale(scale, scale)
+  ctx.scale(metrics.actualScale, metrics.actualScale)
+
+  const {
+    paddingX,
+    headerHeight,
+    dayColWidth,
+    periodColWidth,
+    classColWidth,
+    classCount,
+    gradeHeaderHeight,
+    classHeaderHeight,
+    rowHeight,
+    dividerHeight,
+    totalWidthBase,
+    totalHeightBase
+  } = metrics
 
   // 1. 全局背景
   ctx.fillStyle = '#FFFFFF'
@@ -129,20 +231,20 @@ export async function renderCampusOverviewPoster(
   ctx.fillStyle = theme.headerBg
   ctx.fillRect(0, 0, totalWidthBase, headerHeight)
 
-  // 绘制装饰性光晕条
+  // 装饰性光晕条
   ctx.fillStyle = theme.headerSub
   ctx.fillRect(0, headerHeight - 4, totalWidthBase, 4)
 
   // 主标题
   ctx.fillStyle = '#FFFFFF'
-  ctx.font = 'bold 30px "Microsoft YaHei", "PingFang SC", sans-serif'
+  ctx.font = 'bold 30px "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(title, totalWidthBase / 2, 44)
 
   // 副标题与统计指标
   ctx.fillStyle = '#E2E8F0'
-  ctx.font = '13.5px "Microsoft YaHei", "PingFang SC", sans-serif'
+  ctx.font = '13.5px "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif'
   const subText = `${subTitle ? `${subTitle}  ·  ` : ''}全校共 ${sheet.stats.classCount} 个教学班  ·  周课程 ${sheet.stats.lessonCount} 节  ·  任课教师 ${sheet.stats.teacherCount} 人`
   ctx.fillText(subText, totalWidthBase / 2, 82)
 
@@ -161,7 +263,11 @@ export async function renderCampusOverviewPoster(
   ctx.font = 'bold 13px "Microsoft YaHei", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('时间 / 节次', startX + (dayColWidth + periodColWidth) / 2, startY + (gradeHeaderHeight + classHeaderHeight) / 2)
+  ctx.fillText(
+    '时间 / 节次',
+    startX + (dayColWidth + periodColWidth) / 2,
+    startY + (gradeHeaderHeight + classHeaderHeight) / 2
+  )
 
   // (2) 年级分组与班级表头
   let colX = startX + dayColWidth + periodColWidth
@@ -202,8 +308,6 @@ export async function renderCampusOverviewPoster(
 
   // 4. 数据行与星期合并
   let currentY = startY + gradeHeaderHeight + classHeaderHeight
-
-  // 收集各星期的行范围用于绘制星期合并单元格
   const dayRowSpans = new Map<number, { startY: number; totalH: number; label: string }>()
 
   for (const row of sheet.rows) {
@@ -265,7 +369,7 @@ export async function renderCampusOverviewPoster(
 
       if (cellData && cellData.text) {
         if (cellData.isLocked) {
-          ctx.fillStyle = '#FEF3C7' // Amber-100 for locked
+          ctx.fillStyle = '#FEF3C7'
         } else if (cellData.color) {
           ctx.fillStyle = cellData.color.startsWith('#') ? `${cellData.color}18` : '#EEF2FF'
         } else {
@@ -285,7 +389,9 @@ export async function renderCampusOverviewPoster(
         ctx.font = 'bold 12px "Microsoft YaHei", sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        const subjTitle = (cellData.subjectName || cellData.text.split('\n')[0] || '') + (cellData.isLocked ? ' 🔒' : '')
+        const subjTitle =
+          (cellData.subjectName || cellData.text.split('\n')[0] || '') +
+          (cellData.isLocked ? ' 🔒' : '')
         ctx.fillText(subjTitle, cX + classColWidth / 2, currentY + rowHeight / 2 - 7)
 
         // 教师 / 场地
@@ -370,21 +476,111 @@ export async function renderCampusOverviewPoster(
     ctx.fillStyle = '#64748B'
     ctx.font = 'italic 11px "Microsoft YaHei", sans-serif'
     ctx.textAlign = 'right'
-    ctx.fillText('★ 智课排智能排课系统输出 · 本图支持高清喷绘与展板大幅面张贴', startX + dayColWidth + periodColWidth + classCount * classColWidth, footerY + 12)
+    ctx.fillText(
+      '★ 智课排智能排课系统输出 · 本图支持高清喷绘与展板大幅面张贴',
+      startX + dayColWidth + periodColWidth + classCount * classColWidth,
+      footerY + 12
+    )
   }
 
-  const dataUrl = canvas.toDataURL('image/png', 1.0)
+  return { canvas, metrics }
+}
 
-  // 估算推荐物理喷绘尺寸 (以 150 DPI ~ 300 DPI 计算)
-  const cmWidth = ((width / (scale * 72)) * 2.54 * (scale >= 2 ? 1.5 : 1)).toFixed(1)
-  const cmHeight = ((height / (scale * 72)) * 2.54 * (scale >= 2 ? 1.5 : 1)).toFixed(1)
-  const estimatedPrintSize = `${cmWidth} cm × ${cmHeight} cm（推荐大幅喷绘展板）`
+/**
+ * 快速生成海报实时预览图（1x 轻量级，极速返回，防止 UI 卡顿）
+ */
+export async function renderCampusOverviewPosterPreview(
+  sheet: OverviewExportSheet,
+  options: PosterOptions = {}
+): Promise<PosterRenderResult> {
+  const { canvas, metrics } = drawPosterCanvas(sheet, options, 1)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
 
   return {
     dataUrl,
-    width,
-    height,
-    scale,
-    estimatedPrintSize
+    width: metrics.widthPx,
+    height: metrics.heightPx,
+    scale: 1,
+    estimatedPrintSize: metrics.estimatedPrintSize
+  }
+}
+
+/**
+ * 导出超高分辨率二进制图片数据（使用 Blob -> Uint8Array，突破 V8 字符串限制与内存溢出）
+ */
+export async function exportCampusOverviewPosterBinary(
+  sheet: OverviewExportSheet,
+  options: PosterOptions = {}
+): Promise<PosterExportBinaryResult> {
+  const requestedScale = options.scale ?? 2
+  const format = options.format ?? 'png'
+  const jpegQuality = options.jpegQuality ?? 0.95
+
+  const { canvas, metrics } = drawPosterCanvas(sheet, options, requestedScale)
+
+  // 辅助函数：将 Canvas 异步转换为 Blob
+  const canvasToBlobAsync = (
+    c: HTMLCanvasElement,
+    mimeType: string,
+    quality?: number
+  ): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      try {
+        c.toBlob((blob) => resolve(blob), mimeType, quality)
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+
+  let mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png'
+  let blob = await canvasToBlobAsync(canvas, mimeType, format === 'jpeg' ? jpegQuality : undefined)
+
+  // 兜底降级：如果 PNG 超大导致内存异常返回空 Blob，自动降级为高画质 JPEG
+  if (!blob && format === 'png') {
+    mimeType = 'image/jpeg'
+    blob = await canvasToBlobAsync(canvas, mimeType, 0.92)
+  }
+
+  if (!blob || blob.size === 0) {
+    throw new Error('Canvas 图像数据生成失败（超出浏览器可用内存），建议选择 JPEG 格式或调低缩放倍率')
+  }
+
+  const arrayBuffer = await blob.arrayBuffer()
+  const buffer = new Uint8Array(arrayBuffer)
+
+  return {
+    buffer,
+    width: metrics.widthPx,
+    height: metrics.heightPx,
+    scale: requestedScale,
+    actualScale: metrics.actualScale,
+    mimeType,
+    estimatedPrintSize: metrics.estimatedPrintSize,
+    sizeBytes: buffer.byteLength
+  }
+}
+
+/** 兼容旧接口的包装器 */
+export async function renderCampusOverviewPoster(
+  sheet: OverviewExportSheet,
+  options: PosterOptions = {}
+): Promise<PosterRenderResult> {
+  const binaryResult = await exportCampusOverviewPosterBinary(sheet, options)
+  // 如果是较小图片可以直接生成 dataURL，超大图片直接返回空或预览
+  let dataUrl = ''
+  try {
+    const { canvas } = drawPosterCanvas(sheet, options, 1)
+    dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+  } catch {
+    dataUrl = ''
+  }
+
+  return {
+    dataUrl,
+    width: binaryResult.width,
+    height: binaryResult.height,
+    scale: binaryResult.scale,
+    estimatedPrintSize: binaryResult.estimatedPrintSize
   }
 }

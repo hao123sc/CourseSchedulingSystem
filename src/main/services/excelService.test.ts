@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import {
   writeSingleTimetableWorksheet,
-  writeOverviewWorksheet
+  writeOverviewWorksheet,
+  validateAndConvertImageBuffer
 } from './excelService'
 import {
   buildOverviewExportSheet,
@@ -115,5 +116,32 @@ describe('excelService · Timetable Excel Worksheet Rendering', () => {
 
     const buffer = await wb.xlsx.writeBuffer()
     expect(buffer.byteLength).toBeGreaterThan(0)
+  })
+
+  it('validates image buffers properly and rejects corrupted 3-byte / empty dataUrl', () => {
+    // 1. Rejects "data:," which formerly produced a 3-byte corrupt file
+    const invalidBase64 = validateAndConvertImageBuffer({ base64Data: 'data:,' })
+    expect(invalidBase64.buffer).toBeNull()
+    expect(invalidBase64.error).toContain('图像数据为空')
+
+    // 2. Rejects random invalid bytes without PNG/JPEG magic headers
+    const badBytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    const badResult = validateAndConvertImageBuffer({ buffer: badBytes })
+    expect(badResult.buffer).toBeNull()
+    expect(badResult.error).toContain('字节数不足')
+
+    // 3. Accepts valid PNG header
+    const validPngBytes = new Uint8Array(128)
+    validPngBytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
+    const validPngResult = validateAndConvertImageBuffer({ buffer: validPngBytes })
+    expect(validPngResult.buffer).not.toBeNull()
+    expect(validPngResult.buffer?.length).toBe(128)
+
+    // 4. Accepts valid JPEG header
+    const validJpgBytes = new Uint8Array(100)
+    validJpgBytes.set([0xff, 0xd8, 0xff, 0xe0], 0)
+    const validJpgResult = validateAndConvertImageBuffer({ buffer: validJpgBytes })
+    expect(validJpgResult.buffer).not.toBeNull()
+    expect(validJpgResult.buffer?.length).toBe(100)
   })
 })

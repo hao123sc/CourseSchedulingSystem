@@ -220,7 +220,12 @@ export interface IpcApi {
   'timetable:versionLessons': (versionId: number) => Lesson[]
   'timetable:moveLesson': (payload: { versionId: number; lessonId: number; toSlotId: number; reason?: string }) => Lesson
   'timetable:exportExcel': (params: TimetableExportParams) => ExcelExportResult
-  'timetable:savePosterImage': (payload: { defaultName: string; base64Data: string }) => { canceled: boolean; filePath: string | null }
+  'timetable:savePosterImage': (payload: {
+    defaultName: string
+    base64Data?: string
+    buffer?: Uint8Array | number[]
+    mimeType?: string
+  }) => { canceled: boolean; filePath: string | null; error?: string }
   'seed:loadPreset': (preset: PresetCode) => PresetLoadResult
   'system:backup': () => { canceled: boolean; filePath: string | null }
   'system:restore': () => { canceled: boolean; success: boolean }
