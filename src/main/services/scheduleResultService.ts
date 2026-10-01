@@ -247,8 +247,7 @@ export function publishVersion(id: number): { success: boolean } {
   const db = getDb()
   const tx = db.transaction(() => {
     const row = db.prepare('SELECT semester_id FROM schedule_version WHERE id = ?').get(id) as
-      | { semester_id: number }
-      | undefined
+      { semester_id: number } | undefined
     if (!row) throw new Error('排课版本不存在')
     db.prepare('UPDATE schedule_version SET is_published = 0 WHERE semester_id = ?').run(
       row.semester_id
@@ -270,30 +269,178 @@ export interface AdjustLessonSlotParams {
 export function adjustLessonSlot(p: AdjustLessonSlotParams): Lesson {
   const db = getDb()
   const tx = db.transaction((): Lesson => {
-    const row = db.prepare(
-      `SELECT id, version_id, task_id, class_id, subject_id, teacher_id, classroom_id,
+    const row = db
+      .prepare(
+        `SELECT id, version_id, task_id, class_id, subject_id, teacher_id, classroom_id,
               slot_id, week_mode, is_locked, consecutive_group, remark
          FROM lesson WHERE id = ? AND version_id = ?`
-    ).get(p.lessonId, p.versionId) as {
-      id: number; version_id: number; task_id: number; class_id: number; subject_id: number;
-      teacher_id: number | null; classroom_id: number | null; slot_id: number; week_mode: string;
-      is_locked: number; consecutive_group: string | null; remark: string | null
-    } | undefined
+      )
+      .get(p.lessonId, p.versionId) as
+      | {
+          id: number
+          version_id: number
+          task_id: number
+          class_id: number
+          subject_id: number
+          teacher_id: number | null
+          classroom_id: number | null
+          slot_id: number
+          week_mode: string
+          is_locked: number
+          consecutive_group: string | null
+          remark: string | null
+        }
+      | undefined
     if (!row) throw new Error('课程不属于当前课表版本')
     if (row.is_locked) throw new Error('预排锁定课程不可移动')
-    const slot = db.prepare('SELECT id FROM time_slot WHERE id = ?').get(p.toSlotId) as { id: number } | undefined
+    const slot = db.prepare('SELECT id FROM time_slot WHERE id = ?').get(p.toSlotId) as
+      { id: number } | undefined
     if (!slot) throw new Error('目标时段不存在')
     const before = { slotId: row.slot_id }
-    db.prepare('UPDATE lesson SET slot_id = ? WHERE id = ? AND version_id = ?').run(p.toSlotId, p.lessonId, p.versionId)
+    db.prepare('UPDATE lesson SET slot_id = ? WHERE id = ? AND version_id = ?').run(
+      p.toSlotId,
+      p.lessonId,
+      p.versionId
+    )
     db.prepare(
       `INSERT INTO adjust_log(version_id, action, before_json, after_json, reason)
        VALUES (?, 'move', ?, ?, ?)`
-    ).run(p.versionId, JSON.stringify({ lessonId: p.lessonId, ...before }), JSON.stringify({ lessonId: p.lessonId, slotId: p.toSlotId }), p.reason ?? null)
+    ).run(
+      p.versionId,
+      JSON.stringify({ lessonId: p.lessonId, ...before }),
+      JSON.stringify({ lessonId: p.lessonId, slotId: p.toSlotId }),
+      p.reason ?? null
+    )
     return {
-      id: row.id, versionId: row.version_id, taskId: row.task_id, classId: row.class_id,
-      subjectId: row.subject_id, teacherId: row.teacher_id, classroomId: row.classroom_id,
-      slotId: p.toSlotId, weekMode: row.week_mode as Lesson['weekMode'], isLocked: false,
-      consecutiveGroup: row.consecutive_group, remark: row.remark
+      id: row.id,
+      versionId: row.version_id,
+      taskId: row.task_id,
+      classId: row.class_id,
+      subjectId: row.subject_id,
+      teacherId: row.teacher_id,
+      classroomId: row.classroom_id,
+      slotId: p.toSlotId,
+      weekMode: row.week_mode as Lesson['weekMode'],
+      isLocked: false,
+      consecutiveGroup: row.consecutive_group,
+      remark: row.remark
+    }
+  })
+  return tx()
+}
+
+export interface SwapLessonSlotsParams {
+  versionId: number
+  lessonAId: number
+  lessonBId: number
+  reason?: string
+}
+
+/** 持久化双课对调（互换时段）；单事务保证原子性与 adjust_log 审计记录。 */
+export function swapLessonSlots(p: SwapLessonSlotsParams): { lessonA: Lesson; lessonB: Lesson } {
+  const db = getDb()
+  const tx = db.transaction((): { lessonA: Lesson; lessonB: Lesson } => {
+    const rowA = db
+      .prepare(
+        `SELECT id, version_id, task_id, class_id, subject_id, teacher_id, classroom_id,
+                slot_id, week_mode, is_locked, consecutive_group, remark
+           FROM lesson WHERE id = ? AND version_id = ?`
+      )
+      .get(p.lessonAId, p.versionId) as
+      | {
+          id: number
+          version_id: number
+          task_id: number
+          class_id: number
+          subject_id: number
+          teacher_id: number | null
+          classroom_id: number | null
+          slot_id: number
+          week_mode: string
+          is_locked: number
+          consecutive_group: string | null
+          remark: string | null
+        }
+      | undefined
+    const rowB = db
+      .prepare(
+        `SELECT id, version_id, task_id, class_id, subject_id, teacher_id, classroom_id,
+                slot_id, week_mode, is_locked, consecutive_group, remark
+           FROM lesson WHERE id = ? AND version_id = ?`
+      )
+      .get(p.lessonBId, p.versionId) as
+      | {
+          id: number
+          version_id: number
+          task_id: number
+          class_id: number
+          subject_id: number
+          teacher_id: number | null
+          classroom_id: number | null
+          slot_id: number
+          week_mode: string
+          is_locked: number
+          consecutive_group: string | null
+          remark: string | null
+        }
+      | undefined
+
+    if (!rowA || !rowB) throw new Error('对调课程不属于当前课表版本')
+    if (rowA.is_locked || rowB.is_locked) throw new Error('预排锁定课程不可对调')
+
+    const slotA = rowA.slot_id
+    const slotB = rowB.slot_id
+
+    db.prepare('UPDATE lesson SET slot_id = ? WHERE id = ? AND version_id = ?').run(
+      slotB,
+      p.lessonAId,
+      p.versionId
+    )
+    db.prepare('UPDATE lesson SET slot_id = ? WHERE id = ? AND version_id = ?').run(
+      slotA,
+      p.lessonBId,
+      p.versionId
+    )
+
+    db.prepare(
+      `INSERT INTO adjust_log(version_id, action, before_json, after_json, reason)
+       VALUES (?, 'swap', ?, ?, ?)`
+    ).run(
+      p.versionId,
+      JSON.stringify({ lessonAId: p.lessonAId, slotA, lessonBId: p.lessonBId, slotB }),
+      JSON.stringify({ lessonAId: p.lessonAId, slotB, lessonBId: p.lessonBId, slotA }),
+      p.reason ?? '课程对调'
+    )
+
+    return {
+      lessonA: {
+        id: rowA.id,
+        versionId: rowA.version_id,
+        taskId: rowA.task_id,
+        classId: rowA.class_id,
+        subjectId: rowA.subject_id,
+        teacherId: rowA.teacher_id,
+        classroomId: rowA.classroom_id,
+        slotId: slotB,
+        weekMode: rowA.week_mode as Lesson['weekMode'],
+        isLocked: false,
+        consecutiveGroup: rowA.consecutive_group,
+        remark: rowA.remark
+      },
+      lessonB: {
+        id: rowB.id,
+        versionId: rowB.version_id,
+        taskId: rowB.task_id,
+        classId: rowB.class_id,
+        subjectId: rowB.subject_id,
+        teacherId: rowB.teacher_id,
+        classroomId: rowB.classroom_id,
+        slotId: slotA,
+        weekMode: rowB.week_mode as Lesson['weekMode'],
+        isLocked: false,
+        consecutiveGroup: rowB.consecutive_group,
+        remark: rowB.remark
+      }
     }
   })
   return tx()

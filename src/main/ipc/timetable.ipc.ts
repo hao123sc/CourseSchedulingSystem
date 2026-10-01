@@ -1,5 +1,9 @@
 import { ipcMain } from 'electron'
-import { adjustLessonSlot, getVersionLessons } from '../services/scheduleResultService'
+import {
+  adjustLessonSlot,
+  getVersionLessons,
+  swapLessonSlots
+} from '../services/scheduleResultService'
 import {
   exportTimetable,
   savePosterImage,
@@ -29,27 +33,24 @@ export function registerTimetableIpc(): void {
       }
     ) => adjustLessonSlot(payload)
   )
+  ipcMain.handle(
+    'timetable:swapLessons',
+    (
+      _e,
+      payload: {
+        versionId: number
+        lessonAId: number
+        lessonBId: number
+        reason?: string
+      }
+    ) => swapLessonSlots(payload)
+  )
   ipcMain.handle('timetable:exportExcel', (_e, params: TimetableExportParams) =>
     exportTimetable(params)
   )
-  ipcMain.handle(
-    'timetable:savePosterImage',
-    (_e, payload) => savePosterImage(payload)
-  )
-  ipcMain.handle(
-    'timetable:initPosterExport',
-    (_e, payload) => initPosterExport(payload)
-  )
-  ipcMain.handle(
-    'timetable:writePosterStrip',
-    (_e, payload) => writePosterStrip(payload)
-  )
-  ipcMain.handle(
-    'timetable:finishPosterExport',
-    (_e, payload) => finishPosterExport(payload)
-  )
-  ipcMain.handle(
-    'timetable:cancelPosterExport',
-    (_e, payload) => cancelPosterExport(payload)
-  )
+  ipcMain.handle('timetable:savePosterImage', (_e, payload) => savePosterImage(payload))
+  ipcMain.handle('timetable:initPosterExport', (_e, payload) => initPosterExport(payload))
+  ipcMain.handle('timetable:writePosterStrip', (_e, payload) => writePosterStrip(payload))
+  ipcMain.handle('timetable:finishPosterExport', (_e, payload) => finishPosterExport(payload))
+  ipcMain.handle('timetable:cancelPosterExport', (_e, payload) => cancelPosterExport(payload))
 }

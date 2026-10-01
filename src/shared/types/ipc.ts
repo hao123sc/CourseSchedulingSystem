@@ -224,6 +224,12 @@ export interface IpcApi {
     toSlotId: number
     reason?: string
   }) => Lesson
+  'timetable:swapLessons': (payload: {
+    versionId: number
+    lessonAId: number
+    lessonBId: number
+    reason?: string
+  }) => { lessonA: Lesson; lessonB: Lesson }
   'timetable:exportExcel': (params: TimetableExportParams) => ExcelExportResult
   'timetable:savePosterImage': (payload: {
     defaultName: string

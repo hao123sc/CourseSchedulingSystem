@@ -18,9 +18,11 @@ export interface AdjustmentConflict {
 }
 
 export interface AdjustmentProposal {
+  actionType?: 'move' | 'swap'
   lessonId: number
   fromSlotId: number
   toSlotId: number
+  swapWithLessonId?: number
 }
 
 /** 只检测换课落点，不改动传入数组；响应路径可直接在渲染端调用。 */
@@ -34,6 +36,11 @@ export function detectAdjustmentConflicts(
   if (moving.isLocked) {
     return [{ code: 'LOCKED', lessonIds: [moving.id], message: '预排锁定课程不可移动' }]
   }
+
+  if (proposal.swapWithLessonId != null) {
+    return detectSwapConflicts(lessons, proposal.lessonId, proposal.swapWithLessonId)
+  }
+
   const conflicts: AdjustmentConflict[] = []
   for (const lesson of lessons) {
     if (lesson.id === moving.id || lesson.slotId !== proposal.toSlotId) continue
@@ -62,28 +69,164 @@ export function detectAdjustmentConflicts(
   return conflicts
 }
 
+/** 检测两节课程互相对调时段的硬冲突；两课均不能为锁定课，且在互换时段不得撞其他课。 */
+export function detectSwapConflicts(
+  lessons: readonly AdjustmentLesson[],
+  lessonAId: number,
+  lessonBId: number
+): AdjustmentConflict[] {
+  const lessonA = lessons.find((l) => l.id === lessonAId)
+  const lessonB = lessons.find((l) => l.id === lessonBId)
+  if (!lessonA || !lessonB) {
+    return [{ code: 'CLASS', lessonIds: [], message: '找不到要对调的课程' }]
+  }
+  if (lessonA.isLocked) {
+    return [{ code: 'LOCKED', lessonIds: [lessonA.id], message: '源课程为预排锁定，不可移动' }]
+  }
+  if (lessonB.isLocked) {
+    return [{ code: 'LOCKED', lessonIds: [lessonB.id], message: '目标课程为预排锁定，不可对调' }]
+  }
+  if (lessonA.slotId === lessonB.slotId) {
+    return [
+      {
+        code: 'CLASS',
+        lessonIds: [lessonA.id, lessonB.id],
+        message: '两节课程处于同一时段，无需对调'
+      }
+    ]
+  }
+
+  const conflicts: AdjustmentConflict[] = []
+  const slotA = lessonA.slotId
+  const slotB = lessonB.slotId
+
+  for (const other of lessons) {
+    if (other.id === lessonA.id || other.id === lessonB.id) continue
+
+    // 检查在 slotB（lessonA 新落点）：是否存在除 lessonB 外的其他课程与 lessonA 冲突
+    if (other.slotId === slotB) {
+      if (other.classId === lessonA.classId) {
+        conflicts.push({
+          code: 'CLASS',
+          lessonIds: [lessonA.id, other.id],
+          message: '班级在目标时段已有其他课程'
+        })
+      }
+      if (lessonA.teacherId != null && other.teacherId === lessonA.teacherId) {
+        conflicts.push({
+          code: 'TEACHER',
+          lessonIds: [lessonA.id, other.id],
+          message: '源课教师在目标时段已有其他课程'
+        })
+      }
+      if (lessonA.classroomId != null && other.classroomId === lessonA.classroomId) {
+        conflicts.push({
+          code: 'ROOM',
+          lessonIds: [lessonA.id, other.id],
+          message: '源课教室在目标时段已被其他课程占用'
+        })
+      }
+    }
+
+    // 检查在 slotA（lessonB 新落点）：是否存在除 lessonA 外的其他课程与 lessonB 冲突
+    if (other.slotId === slotA) {
+      if (other.classId === lessonB.classId) {
+        conflicts.push({
+          code: 'CLASS',
+          lessonIds: [lessonB.id, other.id],
+          message: '班级在原时段已有其他课程'
+        })
+      }
+      if (lessonB.teacherId != null && other.teacherId === lessonB.teacherId) {
+        conflicts.push({
+          code: 'TEACHER',
+          lessonIds: [lessonB.id, other.id],
+          message: '目标课教师在原时段已有其他课程'
+        })
+      }
+      if (lessonB.classroomId != null && other.classroomId === lessonB.classroomId) {
+        conflicts.push({
+          code: 'ROOM',
+          lessonIds: [lessonB.id, other.id],
+          message: '目标课教室在原时段已被其他课程占用'
+        })
+      }
+    }
+  }
+
+  return conflicts
+}
+
+export interface AdjustmentViewContext {
+  view: 'class' | 'teacher' | 'room' | 'overview'
+  targetId: number | null
+}
+
 /**
- * 用和实际落点完全相同的冲突检测批量计算可调目标，供拖拽与单击高亮共用。
+ * 用和实际落点完全相同的冲突检测批量计算可调目标（含空白移入与合法对调），供拖拽与单击高亮共用。
  * 原位置不是“移动目标”；单击源课程由交互层解释为取消调课。
  */
 export function validAdjustmentTargets(
   lessons: readonly AdjustmentLesson[],
   lessonId: number,
-  slotIds: readonly number[]
+  slotIds: readonly number[],
+  viewContext?: AdjustmentViewContext
 ): Set<number> {
   const moving = lessons.find((lesson) => lesson.id === lessonId)
   if (!moving || moving.isLocked) return new Set()
-  return new Set(
-    slotIds.filter(
-      (slotId) =>
-        slotId !== moving.slotId &&
+
+  const validSlots = new Set<number>()
+
+  for (const slotId of slotIds) {
+    if (slotId === moving.slotId) continue
+
+    // 查找在当前视图上下文下占用该 slotId 的课程
+    let occupants: AdjustmentLesson[] = []
+    if (viewContext && viewContext.targetId != null) {
+      if (viewContext.view === 'class') {
+        occupants = lessons.filter((l) => l.classId === viewContext.targetId && l.slotId === slotId)
+      } else if (viewContext.view === 'teacher') {
+        occupants = lessons.filter(
+          (l) => l.teacherId === viewContext.targetId && l.slotId === slotId
+        )
+      } else if (viewContext.view === 'room') {
+        occupants = lessons.filter(
+          (l) => l.classroomId === viewContext.targetId && l.slotId === slotId
+        )
+      }
+    } else {
+      occupants = lessons.filter(
+        (l) =>
+          l.slotId === slotId &&
+          (l.classId === moving.classId ||
+            (moving.teacherId != null && l.teacherId === moving.teacherId) ||
+            (moving.classroomId != null && l.classroomId === moving.classroomId))
+      )
+    }
+
+    if (occupants.length === 0) {
+      // 空白槽位：单课移入
+      if (
         detectAdjustmentConflicts(lessons, {
           lessonId,
           fromSlotId: moving.slotId,
           toSlotId: slotId
         }).length === 0
-    )
-  )
+      ) {
+        validSlots.add(slotId)
+      }
+    } else {
+      // 占用槽位：检测是否能与该槽位上的课程对调
+      const canSwap = occupants.some(
+        (occ) => !occ.isLocked && detectSwapConflicts(lessons, moving.id, occ.id).length === 0
+      )
+      if (canSwap) {
+        validSlots.add(slotId)
+      }
+    }
+  }
+
+  return validSlots
 }
 
 export interface AdjustmentCommand {
@@ -98,10 +241,18 @@ export function createAdjustmentCommand(proposal: AdjustmentProposal): Adjustmen
     apply(lessons) {
       const lesson = lessons.find((item) => item.id === proposal.lessonId)
       if (lesson) lesson.slotId = proposal.toSlotId
+      if (proposal.swapWithLessonId != null) {
+        const swapLesson = lessons.find((item) => item.id === proposal.swapWithLessonId)
+        if (swapLesson) swapLesson.slotId = proposal.fromSlotId
+      }
     },
     undo(lessons) {
       const lesson = lessons.find((item) => item.id === proposal.lessonId)
       if (lesson) lesson.slotId = proposal.fromSlotId
+      if (proposal.swapWithLessonId != null) {
+        const swapLesson = lessons.find((item) => item.id === proposal.swapWithLessonId)
+        if (swapLesson) swapLesson.slotId = proposal.toSlotId
+      }
     }
   }
 }

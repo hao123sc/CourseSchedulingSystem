@@ -17,8 +17,10 @@ import {
   AdjustmentHistory,
   createAdjustmentCommand,
   detectAdjustmentConflicts,
+  detectSwapConflicts,
   validAdjustmentTargets,
-  type AdjustmentLesson
+  type AdjustmentLesson,
+  type AdjustmentProposal
 } from '@shared/adjustments'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -68,7 +70,6 @@ export function TimetablePage(): React.JSX.Element {
   const [draggingLesson, setDraggingLesson] = useState<GridLesson | null>(null)
   const [clickAdjustmentLesson, setClickAdjustmentLesson] = useState<GridLesson | null>(null)
   const [adjustmentSaving, setAdjustmentSaving] = useState(false)
-  const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [posterModalOpen, setPosterModalOpen] = useState(false)
   const history = useRef(new AdjustmentHistory(50))
@@ -136,7 +137,6 @@ export function TimetablePage(): React.JSX.Element {
     setSelected(null)
     setDraggingLesson(null)
     setClickAdjustmentLesson(null)
-    setAdjustmentNotice(null)
   }, [versionId])
 
   // 版本课表行
@@ -294,7 +294,7 @@ export function TimetablePage(): React.JSX.Element {
         stageId: lesson.classId != null ? (stageOfClass.get(lesson.classId) ?? null) : null
       }
       setView('teacher')
-      setAdjustmentNotice('已跳转到该教师课表')
+      toast.info('已跳转到该教师课表')
     } else if (view === 'teacher' && lesson.classId != null) {
       pendingRelatedJump.current = {
         view: 'class',
@@ -302,7 +302,7 @@ export function TimetablePage(): React.JSX.Element {
         stageId: stageOfClass.get(lesson.classId) ?? null
       }
       setView('class')
-      setAdjustmentNotice('已跳转到该班级课表')
+      toast.info('已跳转到该班级课表')
     }
   }
 
@@ -330,22 +330,23 @@ export function TimetablePage(): React.JSX.Element {
   )
   const adjustmentLesson = draggingLesson ?? clickAdjustmentLesson
 
-  /** 拖拽与单击调课共用同一套冲突口径和可落点高亮。 */
+  /** 拖拽与单击调课共用同一套冲突口径和可落点高亮（含空位移入与双向对调）。 */
   const dropSlots = useMemo(() => {
     if (adjustmentLesson?.lessonId == null || axis == null) return null
     return validAdjustmentTargets(
       adjustmentRows,
       adjustmentLesson.lessonId,
-      axis.rows.map((row) => row.slotId)
+      axis.rows.map((row) => row.slotId),
+      { view, targetId: resolvedTargetId }
     )
-  }, [adjustmentLesson, adjustmentRows, axis])
+  }, [adjustmentLesson, adjustmentRows, axis, view, resolvedTargetId])
 
   useEffect(() => {
     if (clickAdjustmentLesson == null) return
     const cancel = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       setClickAdjustmentLesson(null)
-      setAdjustmentNotice('已取消单击调课')
+      toast.info('已取消调课')
     }
     window.addEventListener('keydown', cancel)
     return () => window.removeEventListener('keydown', cancel)
@@ -409,7 +410,8 @@ export function TimetablePage(): React.JSX.Element {
 
   const moveLesson = async (
     active: GridLesson | null,
-    slotId: number,
+    targetSlotId: number,
+    targetLesson: GridLesson | null,
     mode: 'click' | 'drag'
   ): Promise<void> => {
     if (adjustmentSaving || versionId == null || active?.lessonId == null) return
@@ -417,48 +419,137 @@ export function TimetablePage(): React.JSX.Element {
     if (source == null) {
       setClickAdjustmentLesson(null)
       setDraggingLesson(null)
-      setAdjustmentNotice('找不到要调整的课程，请重新选择')
+      toast.error('找不到要调整的课程，请重新选择')
       return
     }
-    if (source.slotId === slotId) {
+
+    // 点击/拖拽到自身当前位置 -> 取消调课
+    if (
+      source.slotId === targetSlotId &&
+      (targetLesson == null || targetLesson.lessonId === source.id)
+    ) {
       if (mode === 'click') {
         setClickAdjustmentLesson(null)
-        setAdjustmentNotice('已取消单击调课')
+        toast.info('已取消单击调课')
       }
       return
     }
-    const proposal = { lessonId: source.id, fromSlotId: source.slotId, toSlotId: slotId }
-    const conflicts = detectAdjustmentConflicts(adjustmentRows, proposal)
-    if (conflicts.length > 0) {
-      const messages = [...new Set(conflicts.map((conflict) => conflict.message))]
-      setAdjustmentNotice(`不可调入：${messages.join('；')}`)
-      return
-    }
-    setAdjustmentSaving(true)
-    try {
-      await api['timetable:moveLesson']({
-        versionId,
-        lessonId: proposal.lessonId,
-        toSlotId: proposal.toSlotId,
-        reason: mode === 'click' ? '单击调课' : '拖拽调课'
-      })
-      // 保存过程中若已切换版本，旧请求可以在数据库完成，但绝不能污染新版本 UI/历史栈。
-      if (currentVersionId.current !== versionId) return
-      const command = createAdjustmentCommand(proposal)
-      history.current.execute(command, adjustmentLessons())
-      setLessons((previous) =>
-        previous.map((lesson) =>
-          lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson
+
+    // 确定目标是否有课程（对调 vs 移入）
+    let swapTarget: Lesson | undefined = undefined
+    if (
+      targetLesson != null &&
+      targetLesson.lessonId != null &&
+      targetLesson.lessonId !== source.id
+    ) {
+      swapTarget = lessons.find((l) => l.id === targetLesson.lessonId)
+    } else {
+      // 若未直接传入 targetLesson（如从 slotClick 触发），按当前视图查找该 slot 上的已有课程
+      if (view === 'class' && resolvedTargetId != null) {
+        swapTarget = lessons.find(
+          (l) => l.classId === resolvedTargetId && l.slotId === targetSlotId && l.id !== source.id
         )
-      )
-      setSelected(null)
-      setClickAdjustmentLesson(null)
-      setDraggingLesson(null)
-      setAdjustmentNotice(mode === 'click' ? '单击调课已完成并保存' : '课程已拖动并保存')
-    } catch (error) {
-      setAdjustmentNotice(`保存换课失败：${String(error)}`)
-    } finally {
-      setAdjustmentSaving(false)
+      } else if (view === 'teacher' && resolvedTargetId != null) {
+        swapTarget = lessons.find(
+          (l) => l.teacherId === resolvedTargetId && l.slotId === targetSlotId && l.id !== source.id
+        )
+      } else if (view === 'room' && resolvedTargetId != null) {
+        swapTarget = lessons.find(
+          (l) =>
+            l.classroomId === resolvedTargetId && l.slotId === targetSlotId && l.id !== source.id
+        )
+      }
+    }
+
+    if (swapTarget != null) {
+      // 对调逻辑
+      if (swapTarget.isLocked) {
+        toast.error('目标课程属于预排锁定内容，不可对调')
+        return
+      }
+      const conflicts = detectSwapConflicts(adjustmentRows, source.id, swapTarget.id)
+      if (conflicts.length > 0) {
+        const messages = [...new Set(conflicts.map((c) => c.message))]
+        toast.error(`不可对调：${messages.join('；')}`)
+        return
+      }
+
+      setAdjustmentSaving(true)
+      try {
+        await api['timetable:swapLessons']({
+          versionId,
+          lessonAId: source.id,
+          lessonBId: swapTarget.id,
+          reason: mode === 'click' ? '单击对调' : '拖拽对调'
+        })
+        if (currentVersionId.current !== versionId) return
+        const proposal: AdjustmentProposal = {
+          actionType: 'swap',
+          lessonId: source.id,
+          fromSlotId: source.slotId,
+          toSlotId: targetSlotId,
+          swapWithLessonId: swapTarget.id
+        }
+        const command = createAdjustmentCommand(proposal)
+        history.current.execute(command, adjustmentLessons())
+        const sourceSlot = source.slotId
+        setLessons((prev) =>
+          prev.map((l) => {
+            if (l.id === source.id) return { ...l, slotId: targetSlotId }
+            if (l.id === swapTarget!.id) return { ...l, slotId: sourceSlot }
+            return l
+          })
+        )
+        setSelected(null)
+        setClickAdjustmentLesson(null)
+        setDraggingLesson(null)
+        toast.success(
+          `已成功将「${active.subjectName}」与「${targetLesson?.subjectName ?? '目标课程'}」对调并保存`
+        )
+      } catch (error) {
+        toast.error(`保存换课失败：${String(error)}`)
+      } finally {
+        setAdjustmentSaving(false)
+      }
+    } else {
+      // 移入空位逻辑
+      const proposal: AdjustmentProposal = {
+        actionType: 'move',
+        lessonId: source.id,
+        fromSlotId: source.slotId,
+        toSlotId: targetSlotId
+      }
+      const conflicts = detectAdjustmentConflicts(adjustmentRows, proposal)
+      if (conflicts.length > 0) {
+        const messages = [...new Set(conflicts.map((conflict) => conflict.message))]
+        toast.error(`不可调入：${messages.join('；')}`)
+        return
+      }
+      setAdjustmentSaving(true)
+      try {
+        await api['timetable:moveLesson']({
+          versionId,
+          lessonId: proposal.lessonId,
+          toSlotId: proposal.toSlotId,
+          reason: mode === 'click' ? '单击移入' : '拖拽移入'
+        })
+        if (currentVersionId.current !== versionId) return
+        const command = createAdjustmentCommand(proposal)
+        history.current.execute(command, adjustmentLessons())
+        setLessons((previous) =>
+          previous.map((lesson) =>
+            lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson
+          )
+        )
+        setSelected(null)
+        setClickAdjustmentLesson(null)
+        setDraggingLesson(null)
+        toast.success('已成功移入空闲时段并保存')
+      } catch (error) {
+        toast.error(`保存换课失败：${String(error)}`)
+      } finally {
+        setAdjustmentSaving(false)
+      }
     }
   }
 
@@ -468,80 +559,119 @@ export function TimetablePage(): React.JSX.Element {
       if (clickAdjustmentLesson.lessonId === lesson.lessonId) {
         setClickAdjustmentLesson(null)
         setSelected(null)
-        setAdjustmentNotice('已取消单击调课')
+        toast.info('已取消调课')
       } else {
-        void moveLesson(clickAdjustmentLesson, lesson.slotId, 'click')
+        void moveLesson(clickAdjustmentLesson, lesson.slotId, lesson, 'click')
       }
       return
     }
     setSelected(lesson)
     if (lesson.lessonId == null || lesson.locked || lesson.overlay) {
-      setAdjustmentNotice('该课程属于预排锁定内容，不可调整')
+      toast.info('该课程属于预排锁定内容，不可调整')
       return
     }
     setClickAdjustmentLesson(lesson)
-    setAdjustmentNotice(null)
   }
 
   const handleDrop = (slotId: number): void => {
-    void moveLesson(draggingLesson, slotId, 'drag')
+    void moveLesson(draggingLesson, slotId, null, 'drag')
   }
 
   const handleSlotClick = (slotId: number): void => {
-    void moveLesson(clickAdjustmentLesson, slotId, 'click')
+    void moveLesson(clickAdjustmentLesson, slotId, null, 'click')
   }
 
   const handleUndo = async (): Promise<void> => {
     const command = history.current.nextUndo
-    if (!command) return
+    if (!command || versionId == null) return
     try {
-      await api['timetable:moveLesson']({
-        versionId: versionId!,
-        lessonId: command.proposal.lessonId,
-        toSlotId: command.proposal.fromSlotId,
-        reason: '撤销调整'
-      })
-      const next = adjustmentLessons()
-      history.current.undo(next)
-      setLessons((previous) =>
-        previous.map((lesson) =>
-          lesson.id === command.proposal.lessonId
-            ? { ...lesson, slotId: command.proposal.fromSlotId }
-            : lesson
+      if (command.proposal.swapWithLessonId != null) {
+        await api['timetable:swapLessons']({
+          versionId,
+          lessonAId: command.proposal.lessonId,
+          lessonBId: command.proposal.swapWithLessonId,
+          reason: '撤销对调'
+        })
+        const next = adjustmentLessons()
+        history.current.undo(next)
+        setLessons((previous) =>
+          previous.map((lesson) => {
+            if (lesson.id === command.proposal.lessonId)
+              return { ...lesson, slotId: command.proposal.fromSlotId }
+            if (lesson.id === command.proposal.swapWithLessonId)
+              return { ...lesson, slotId: command.proposal.toSlotId }
+            return lesson
+          })
         )
-      )
+      } else {
+        await api['timetable:moveLesson']({
+          versionId,
+          lessonId: command.proposal.lessonId,
+          toSlotId: command.proposal.fromSlotId,
+          reason: '撤销移动'
+        })
+        const next = adjustmentLessons()
+        history.current.undo(next)
+        setLessons((previous) =>
+          previous.map((lesson) =>
+            lesson.id === command.proposal.lessonId
+              ? { ...lesson, slotId: command.proposal.fromSlotId }
+              : lesson
+          )
+        )
+      }
       setClickAdjustmentLesson(null)
       setDraggingLesson(null)
-      setAdjustmentNotice('已撤销并保存')
+      toast.success('已撤销上一步操作并保存')
     } catch (error) {
-      setAdjustmentNotice(`撤销保存失败：${String(error)}`)
+      toast.error(`撤销保存失败：${String(error)}`)
     }
   }
 
   const handleRedo = async (): Promise<void> => {
     const command = history.current.nextRedo
-    if (!command) return
+    if (!command || versionId == null) return
     try {
-      await api['timetable:moveLesson']({
-        versionId: versionId!,
-        lessonId: command.proposal.lessonId,
-        toSlotId: command.proposal.toSlotId,
-        reason: '重做调整'
-      })
-      const next = adjustmentLessons()
-      history.current.redo(next)
-      setLessons((previous) =>
-        previous.map((lesson) =>
-          lesson.id === command.proposal.lessonId
-            ? { ...lesson, slotId: command.proposal.toSlotId }
-            : lesson
+      if (command.proposal.swapWithLessonId != null) {
+        await api['timetable:swapLessons']({
+          versionId,
+          lessonAId: command.proposal.lessonId,
+          lessonBId: command.proposal.swapWithLessonId,
+          reason: '重做对调'
+        })
+        const next = adjustmentLessons()
+        history.current.redo(next)
+        setLessons((previous) =>
+          previous.map((lesson) => {
+            if (lesson.id === command.proposal.lessonId)
+              return { ...lesson, slotId: command.proposal.toSlotId }
+            if (lesson.id === command.proposal.swapWithLessonId)
+              return { ...lesson, slotId: command.proposal.fromSlotId }
+            return lesson
+          })
         )
-      )
+      } else {
+        await api['timetable:moveLesson']({
+          versionId,
+          lessonId: command.proposal.lessonId,
+          toSlotId: command.proposal.toSlotId,
+          reason: '重做移动'
+        })
+        const next = adjustmentLessons()
+        history.current.redo(next)
+        setLessons((previous) =>
+          previous.map((lesson) =>
+            lesson.id === command.proposal.lessonId
+              ? { ...lesson, slotId: command.proposal.toSlotId }
+              : lesson
+          )
+        )
+      }
       setClickAdjustmentLesson(null)
       setDraggingLesson(null)
-      setAdjustmentNotice('已重做并保存')
+      toast.success('已重做上一步操作并保存')
     } catch (error) {
-      setAdjustmentNotice(`重做保存失败：${String(error)}`)
+      toast.error(`重做保存失败：${String(error)}`)
     }
   }
 
@@ -554,29 +684,24 @@ export function TimetablePage(): React.JSX.Element {
     const sourceSlotId = selected.slotId
 
     if (swapWithLessonId != null) {
-      const proposal = {
+      const proposal: AdjustmentProposal = {
+        actionType: 'swap',
         lessonId: sourceLessonId,
         fromSlotId: sourceSlotId,
         toSlotId: targetSlotId,
         swapWithLessonId
       }
-      const conflicts = detectAdjustmentConflicts(adjustmentLessons(), proposal)
+      const conflicts = detectSwapConflicts(adjustmentRows, sourceLessonId, swapWithLessonId)
       if (conflicts.length > 0) {
-        setAdjustmentNotice(conflicts.map((c) => c.message).join('；'))
+        toast.error(conflicts.map((c) => c.message).join('；'))
         return
       }
 
       try {
-        await api['timetable:moveLesson']({
+        await api['timetable:swapLessons']({
           versionId,
-          lessonId: sourceLessonId,
-          toSlotId: targetSlotId,
-          reason: '智能换课建议对调'
-        })
-        await api['timetable:moveLesson']({
-          versionId,
-          lessonId: swapWithLessonId,
-          toSlotId: sourceSlotId,
+          lessonAId: sourceLessonId,
+          lessonBId: swapWithLessonId,
           reason: '智能换课建议对调'
         })
         const cmd = createAdjustmentCommand(proposal)
@@ -588,21 +713,22 @@ export function TimetablePage(): React.JSX.Element {
             return l
           })
         )
-        setAdjustmentNotice('已成功对调两门课程并保存')
+        toast.success('已成功对调两门课程并保存')
         setSelected(null)
         setClickAdjustmentLesson(null)
       } catch (err) {
-        setAdjustmentNotice(`对调课程失败：${String(err)}`)
+        toast.error(`对调课程失败：${String(err)}`)
       }
     } else {
-      const proposal = {
+      const proposal: AdjustmentProposal = {
+        actionType: 'move',
         lessonId: sourceLessonId,
         fromSlotId: sourceSlotId,
         toSlotId: targetSlotId
       }
-      const conflicts = detectAdjustmentConflicts(adjustmentLessons(), proposal)
+      const conflicts = detectAdjustmentConflicts(adjustmentRows, proposal)
       if (conflicts.length > 0) {
-        setAdjustmentNotice(conflicts.map((conflict) => conflict.message).join('；'))
+        toast.error(conflicts.map((conflict) => conflict.message).join('；'))
         return
       }
       try {
@@ -620,11 +746,11 @@ export function TimetablePage(): React.JSX.Element {
             lesson.id === proposal.lessonId ? { ...lesson, slotId: proposal.toSlotId } : lesson
           )
         )
-        setAdjustmentNotice('已成功移入空闲时段并保存')
+        toast.success('已成功移入空闲时段并保存')
         setSelected(null)
         setClickAdjustmentLesson(null)
       } catch (error) {
-        setAdjustmentNotice(`移入失败：${String(error)}`)
+        toast.error(`移入失败：${String(error)}`)
       }
     }
   }
@@ -697,6 +823,30 @@ export function TimetablePage(): React.JSX.Element {
           />
         )}
 
+        {/* 调课模式提示：紧凑内嵌于工具栏，绝不新增全宽块挤压表格垂直高度 */}
+        {clickAdjustmentLesson && (
+          <div className="flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs text-emerald-900 animate-in fade-in dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            <span className="font-semibold">调课中:</span>
+            <span className="max-w-[180px] truncate">
+              已选「{clickAdjustmentLesson.subjectName}」
+            </span>
+            <span className="hidden text-emerald-700 dark:text-emerald-300 xl:inline">
+              （绿色格可调入/对调）
+            </span>
+            <button
+              type="button"
+              className="ml-1 rounded px-1.5 py-0.5 font-medium hover:bg-emerald-200/60 dark:hover:bg-emerald-500/30"
+              onClick={() => {
+                setClickAdjustmentLesson(null)
+                toast.info('已取消调课')
+              }}
+            >
+              取消(Esc)
+            </button>
+          </div>
+        )}
+
         <div className="flex-1" />
 
         <span
@@ -754,35 +904,6 @@ export function TimetablePage(): React.JSX.Element {
           🖨️ 打印
         </Button>
       </div>
-
-      {clickAdjustmentLesson && (
-        <div className="flex items-center gap-3 rounded-btn border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
-          <span className="font-semibold">单击调课</span>
-          <span className="min-w-0 flex-1 truncate">
-            已选择“{clickAdjustmentLesson.subjectName}
-            ”：绿色格可调入，灰色格有冲突；再次单击源课程或按 Esc 取消。
-          </span>
-          <button
-            type="button"
-            className="shrink-0 rounded px-2 py-1 font-medium hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
-            onClick={() => {
-              setClickAdjustmentLesson(null)
-              setAdjustmentNotice('已取消单击调课')
-            }}
-          >
-            取消（Esc）
-          </button>
-        </div>
-      )}
-
-      {adjustmentNotice && (
-        <div
-          role="status"
-          className="rounded-btn border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-100"
-        >
-          {adjustmentNotice}
-        </div>
-      )}
 
       {/* 主体三栏 */}
       <div className="flex min-h-0 flex-1 gap-3">
@@ -890,7 +1011,6 @@ export function TimetablePage(): React.JSX.Element {
                       if (lesson.lessonId == null || lesson.locked || adjustmentSaving) return
                       setClickAdjustmentLesson(null)
                       setDraggingLesson(lesson)
-                      setAdjustmentNotice(null)
                     }}
                     onDragEnd={() => setDraggingLesson(null)}
                     onOpenRelated={(lesson) => {

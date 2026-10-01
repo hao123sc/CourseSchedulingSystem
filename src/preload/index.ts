@@ -139,6 +139,7 @@ const zhikepaiApi: {
   'timetable:versionLessons': (versionId) =>
     ipcRenderer.invoke('timetable:versionLessons', versionId),
   'timetable:moveLesson': (payload) => ipcRenderer.invoke('timetable:moveLesson', payload),
+  'timetable:swapLessons': (payload) => ipcRenderer.invoke('timetable:swapLessons', payload),
   'timetable:exportExcel': (params) => ipcRenderer.invoke('timetable:exportExcel', params),
   'timetable:savePosterImage': (payload) =>
     ipcRenderer.invoke('timetable:savePosterImage', payload),
