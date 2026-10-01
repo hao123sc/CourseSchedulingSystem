@@ -226,6 +226,23 @@ export interface IpcApi {
     buffer?: Uint8Array | number[]
     mimeType?: string
   }) => { canceled: boolean; filePath: string | null; error?: string }
+  'timetable:initPosterExport': (payload: {
+    defaultName: string
+    fullWidth: number
+    fullHeight: number
+  }) => { canceled: boolean; exportId?: string; filePath?: string | null; error?: string }
+  'timetable:writePosterStrip': (payload: {
+    exportId: string
+    stripRow: number
+    stripHeight: number
+    rgba: Uint8Array | number[]
+  }) => { success: boolean; error?: string }
+  'timetable:finishPosterExport': (payload: {
+    exportId: string
+  }) => { success: boolean; filePath: string; sizeBytes: number; error?: string }
+  'timetable:cancelPosterExport': (payload: {
+    exportId: string
+  }) => void
   'seed:loadPreset': (preset: PresetCode) => PresetLoadResult
   'system:backup': () => { canceled: boolean; filePath: string | null }
   'system:restore': () => { canceled: boolean; success: boolean }

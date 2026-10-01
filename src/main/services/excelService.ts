@@ -1,5 +1,7 @@
 import { dialog, BrowserWindow } from 'electron'
 import fs from 'fs'
+import * as zlib from 'node:zlib'
+import crypto from 'node:crypto'
 import ExcelJS from 'exceljs'
 import { getDb } from '../db/connection'
 import { schoolRepo } from '../db/repositories/schoolRepo'
@@ -479,6 +481,179 @@ export async function savePosterImage(payload: {
 
   fs.writeFileSync(filePath, validation.buffer)
   return { canceled: false, filePath }
+}
+
+interface PosterStreamingSession {
+  exportId: string
+  filePath: string
+  fullWidth: number
+  fullHeight: number
+  fileStream: fs.WriteStream
+  deflate: zlib.Deflate
+  idatChunks: Buffer[]
+  finishPromise: Promise<number>
+  resolveFinish: (size: number) => void
+  rejectFinish: (err: unknown) => void
+}
+
+const activePosterSessions = new Map<string, PosterStreamingSession>()
+
+function calcPngCrc32(buf: Buffer): number {
+  let crc = 0xffffffff
+  for (let i = 0; i < buf.length; i++) {
+    let c = (crc ^ buf[i]) & 0xff
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    }
+    crc = (crc >>> 8) ^ c
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function writeRawPngChunk(fileStream: fs.WriteStream, type: string, data: Buffer): void {
+  const lenBuf = Buffer.alloc(4)
+  lenBuf.writeUInt32BE(data.length, 0)
+  const typeBuf = Buffer.from(type, 'ascii')
+  const crcBuf = Buffer.alloc(4)
+  const combined = Buffer.concat([typeBuf, data])
+  crcBuf.writeUInt32BE(calcPngCrc32(combined), 0)
+  fileStream.write(Buffer.concat([lenBuf, combined, crcBuf]))
+}
+
+/** 初始化大幅面海报分块流式导出（支持 20000+ px 超大画幅，零显存压力） */
+export async function initPosterExport(payload: {
+  defaultName: string
+  fullWidth: number
+  fullHeight: number
+}): Promise<{ canceled: boolean; exportId?: string; filePath?: string | null; error?: string }> {
+  const win = focused()
+  const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+    title: '保存大幅面海报图片（广告公司打印）',
+    defaultPath: payload.defaultName.replace(/[\\/:*?"<>|]/g, '_'),
+    filters: [{ name: 'PNG 广告喷绘图片 (*.png)', extensions: ['png'] }]
+  })
+
+  if (canceled || !filePath) return { canceled: true, filePath: null }
+
+  const exportId = crypto.randomUUID()
+  const fileStream = fs.createWriteStream(filePath)
+
+  // 1. 写入 PNG 文件签名
+  fileStream.write(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+
+  // 2. 写入 IHDR 头部数据块 (13 字节)
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(payload.fullWidth, 0)
+  ihdr.writeUInt32BE(payload.fullHeight, 4)
+  ihdr[8] = 8 // bit depth: 8
+  ihdr[9] = 6 // color type: 6 = RGBA
+  ihdr[10] = 0 // compression: Deflate
+  ihdr[11] = 0 // filter: standard
+  ihdr[12] = 0 // interlace: none
+  writeRawPngChunk(fileStream, 'IHDR', ihdr)
+
+  // 3. 创建 Deflate 流
+  const deflate = zlib.createDeflate({ level: 4 })
+  const idatChunks: Buffer[] = []
+  deflate.on('data', (chunk) => idatChunks.push(chunk))
+
+  let resolveFinish!: (size: number) => void
+  let rejectFinish!: (err: unknown) => void
+  const finishPromise = new Promise<number>((resolve, reject) => {
+    resolveFinish = resolve
+    rejectFinish = reject
+  })
+
+  deflate.on('end', () => {
+    const fullIdat = Buffer.concat(idatChunks)
+    writeRawPngChunk(fileStream, 'IDAT', fullIdat)
+    writeRawPngChunk(fileStream, 'IEND', Buffer.alloc(0))
+    fileStream.end(() => {
+      try {
+        const stats = fs.statSync(filePath)
+        resolveFinish(stats.size)
+      } catch (err) {
+        rejectFinish(err)
+      }
+    })
+  })
+
+  deflate.on('error', (err) => rejectFinish(err))
+  fileStream.on('error', (err) => rejectFinish(err))
+
+  const session: PosterStreamingSession = {
+    exportId,
+    filePath,
+    fullWidth: payload.fullWidth,
+    fullHeight: payload.fullHeight,
+    fileStream,
+    deflate,
+    idatChunks,
+    finishPromise,
+    resolveFinish,
+    rejectFinish
+  }
+
+  activePosterSessions.set(exportId, session)
+  return { canceled: false, exportId, filePath }
+}
+
+/** 写入切片水平条纹行数据 */
+export async function writePosterStrip(payload: {
+  exportId: string
+  stripRow: number
+  stripHeight: number
+  rgba: Uint8Array | number[]
+}): Promise<{ success: boolean; error?: string }> {
+  const session = activePosterSessions.get(payload.exportId)
+  if (!session) return { success: false, error: '导出任务会话已失效' }
+
+  const rawRgba = Buffer.from(payload.rgba)
+  const bytesPerRow = session.fullWidth * 4
+
+  for (let r = 0; r < payload.stripHeight; r++) {
+    const rowBuf = Buffer.alloc(1 + bytesPerRow)
+    rowBuf[0] = 0 // PNG filter none
+    rawRgba.copy(rowBuf, 1, r * bytesPerRow, (r + 1) * bytesPerRow)
+    session.deflate.write(rowBuf)
+  }
+
+  return { success: true }
+}
+
+/** 完成海报导出并封装 PNG */
+export async function finishPosterExport(payload: {
+  exportId: string
+}): Promise<{ success: boolean; filePath: string; sizeBytes: number; error?: string }> {
+  const session = activePosterSessions.get(payload.exportId)
+  if (!session) return { success: false, filePath: '', sizeBytes: 0, error: '导出任务会话已失效' }
+
+  try {
+    session.deflate.end()
+    const sizeBytes = await session.finishPromise
+    activePosterSessions.delete(payload.exportId)
+    return { success: true, filePath: session.filePath, sizeBytes }
+  } catch (err) {
+    activePosterSessions.delete(payload.exportId)
+    return { success: false, filePath: session.filePath, sizeBytes: 0, error: String(err) }
+  }
+}
+
+/** 取消海报导出并清理临时文件 */
+export function cancelPosterExport(payload: { exportId: string }): void {
+  const session = activePosterSessions.get(payload.exportId)
+  if (!session) return
+
+  try {
+    session.deflate.destroy()
+    session.fileStream.destroy()
+    if (fs.existsSync(session.filePath)) {
+      fs.unlinkSync(session.filePath)
+    }
+  } catch {
+    // 忽略清理失败
+  }
+  activePosterSessions.delete(payload.exportId)
 }
 
 /** 课表 Excel 导出主服务 */

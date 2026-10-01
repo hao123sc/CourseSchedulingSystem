@@ -4,7 +4,6 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Select } from '@renderer/components/ui/select'
 import { Badge } from '@renderer/components/ui/badge'
-import { api } from '@renderer/lib/api'
 import { toast } from '@renderer/stores/toastStore'
 import {
   buildOverviewExportSheet,
@@ -13,7 +12,7 @@ import {
 import {
   calculatePosterMetrics,
   renderCampusOverviewPosterPreview,
-  exportCampusOverviewPosterBinary,
+  exportCampusOverviewPosterStreaming,
   type PosterOptions,
   type PosterRenderResult
 } from '@renderer/lib/posterGenerator'
@@ -198,11 +197,9 @@ export function PosterExportModal({
     setExportStatus(`正在生成 ${targetMetrics.widthPx} × ${targetMetrics.heightPx} 像素超高分辨率图像...`)
 
     try {
-      // 导出使用选定的分辨率和格式生成二进制 ArrayBuffer
       const options: PosterOptions = {
         scale,
         format,
-        jpegQuality: 0.95,
         theme,
         customTitle,
         customSubTitle,
@@ -211,37 +208,22 @@ export function PosterExportModal({
         signatoryText
       }
 
-      const binaryResult = await exportCampusOverviewPosterBinary(overviewSheet, options)
-      setExportStatus(`正在保存图像文件 (${(binaryResult.sizeBytes / 1024 / 1024).toFixed(2)} MB)...`)
+      const streamResult = await exportCampusOverviewPosterStreaming(
+        overviewSheet,
+        options,
+        (_ratio, text) => {
+          setExportStatus(text)
+        }
+      )
 
-      const dpiLabel =
-        scale === 1
-          ? '96DPI'
-          : scale === 1.5
-          ? '150DPI'
-          : scale === 2
-          ? '200DPI_高清'
-          : scale === 3
-          ? '300DPI_广告喷绘级'
-          : '400DPI_巨幅印刷'
-
-      const ext = binaryResult.mimeType.includes('jpeg') ? 'jpg' : 'png'
-      const defaultName = `${schoolName}_${semesterName}_${stageName || '全校'}总课表_大幅海报_${dpiLabel}.${ext}`
-
-      const res = await api['timetable:savePosterImage']({
-        defaultName,
-        buffer: binaryResult.buffer,
-        mimeType: binaryResult.mimeType
-      })
-
-      if (res.canceled) {
+      if (streamResult.canceled) {
         toast.info('已取消保存')
-      } else if (res.error) {
-        toast.error(`保存失败: ${res.error}`)
+      } else if (streamResult.error) {
+        toast.error(`保存失败: ${streamResult.error}`)
       } else {
-        const sizeMb = (binaryResult.sizeBytes / 1024 / 1024).toFixed(2)
+        const sizeMb = (streamResult.sizeBytes / 1024 / 1024).toFixed(2)
         toast.success(
-          `大幅面海报图片导出成功！分辨率：${binaryResult.width}×${binaryResult.height}px，大小：${sizeMb} MB，保存至：${res.filePath}`
+          `大幅面海报图片导出成功！分辨率：${streamResult.width}×${streamResult.height}px，大小：${sizeMb} MB，保存至：${streamResult.filePath}`
         )
         onClose()
       }

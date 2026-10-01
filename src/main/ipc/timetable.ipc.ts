@@ -1,6 +1,13 @@
 import { ipcMain } from 'electron'
 import { adjustLessonSlot, getVersionLessons } from '../services/scheduleResultService'
-import { exportTimetable, savePosterImage } from '../services/excelService'
+import {
+  exportTimetable,
+  savePosterImage,
+  initPosterExport,
+  writePosterStrip,
+  finishPosterExport,
+  cancelPosterExport
+} from '../services/excelService'
 import type { TimetableExportParams } from '@shared/types/ipc'
 
 /**
@@ -27,6 +34,22 @@ export function registerTimetableIpc(): void {
   )
   ipcMain.handle(
     'timetable:savePosterImage',
-    (_e, payload: { defaultName: string; base64Data: string }) => savePosterImage(payload)
+    (_e, payload) => savePosterImage(payload)
+  )
+  ipcMain.handle(
+    'timetable:initPosterExport',
+    (_e, payload) => initPosterExport(payload)
+  )
+  ipcMain.handle(
+    'timetable:writePosterStrip',
+    (_e, payload) => writePosterStrip(payload)
+  )
+  ipcMain.handle(
+    'timetable:finishPosterExport',
+    (_e, payload) => finishPosterExport(payload)
+  )
+  ipcMain.handle(
+    'timetable:cancelPosterExport',
+    (_e, payload) => cancelPosterExport(payload)
   )
 }

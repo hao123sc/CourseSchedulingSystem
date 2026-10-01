@@ -141,6 +141,14 @@ const zhikepaiApi: {
   'timetable:exportExcel': (params) => ipcRenderer.invoke('timetable:exportExcel', params),
   'timetable:savePosterImage': (payload) =>
     ipcRenderer.invoke('timetable:savePosterImage', payload),
+  'timetable:initPosterExport': (payload) =>
+    ipcRenderer.invoke('timetable:initPosterExport', payload),
+  'timetable:writePosterStrip': (payload) =>
+    ipcRenderer.invoke('timetable:writePosterStrip', payload),
+  'timetable:finishPosterExport': (payload) =>
+    ipcRenderer.invoke('timetable:finishPosterExport', payload),
+  'timetable:cancelPosterExport': (payload) =>
+    ipcRenderer.invoke('timetable:cancelPosterExport', payload),
 
   // ---- 事件订阅（Main → Renderer） ----
   onScheduleEvent: (cb) => {
