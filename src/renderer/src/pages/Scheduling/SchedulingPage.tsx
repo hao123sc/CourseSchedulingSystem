@@ -1,362 +1,337 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, scheduleEvents } from '@renderer/lib/api'
-import { useSchoolStore } from '@renderer/stores/schoolStore'
-import { useMetaStore } from '@renderer/stores/metaStore'
 import { toast } from '@renderer/stores/toastStore'
-import type { ScheduleVersion, WeightProfile } from '@shared/types/entities'
-import type { ScheduleDonePayload, ScheduleProgressPayload, SolvePhase } from '@shared/types/ipc'
-import type { Diagnosis } from '@shared/domain'
-import { DiagnosisCard } from '@renderer/components/scheduling/DiagnosisCard'
-import { Badge } from '@renderer/components/ui/badge'
+import { useSchoolStore } from '@renderer/stores/schoolStore'
 import { Button } from '@renderer/components/ui/button'
+import { Badge } from '@renderer/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
+import { DiagnosisCard } from '@renderer/components/scheduling/DiagnosisCard'
+import { cn } from '@renderer/lib/utils'
+import type { ScheduleVersion, WeightProfile } from '@shared/types/entities'
+import type { ScheduleDonePayload, ScheduleProgressPayload } from '@shared/types/ipc'
 
-type Phase = 'idle' | 'running' | 'done'
+/**
+ * 排课执行页（docs/05 §4.4）。
+ *
+ * 刻意朴素：方案卡 + 进度条 + 阶段清单 + 人话描述 + 诊断卡。
+ * 不显示罚分、温度、算子权重——评委不关心，反而显得复杂。
+ *
+ * M3 口径：先保证「排满 + 零冲突」；「优化课表质量 / 精细调整」两个阶段
+ * 属 M5 引擎 v2，届时在阶段清单里补上。
+ * 范围只开放「全校」；按年级局部重排与「保留已锁定课程」属 M6 增量重排。
+ */
+
+type RunPhase = 'idle' | 'running' | 'done'
+
+/** 阶段清单：phase → 步骤（M5 会在 2、3 之间插入质量优化两步） */
+const STEPS = [
+  { key: 'preprocess', label: '输入与规则检查' },
+  { key: 'construct', label: '生成初始课表' },
+  { key: 'optimize', label: '优化课表质量' },
+  { key: 'verify', label: '校验硬约束' }
+] as const
+
+/** 风格档位的补充说明（docs/05 §4.4 的示例文案，按 code 匹配） */
+const PROFILE_HINT: Record<string, string> = {
+  teacher_first: '更看看重教师课时均衡、减少空隙课',
+  balanced: '各项软约束均衡取舍，适合大多数学校',
+  student_first: '更看重同科分散、主课排上午'
+}
 
 interface DoneState {
   status: ScheduleDonePayload['status']
-  versionId: number | null
   versionName: string | null
+  versionId: number | null
   lessonCount: number
   lockedCount: number
-  skippedFixed: number
+  elapsedMs: number
   unplacedCount: number
   violationCount: number
   accidentalBlocks: number
-  elapsedMs: number
   starts: number
-  diagnostics: Diagnosis[]
-  error: string | null
+  diagnostics: NonNullable<ScheduleDonePayload['summary']>['diagnostics']
+  error?: string
 }
-
-const PHASE_LABELS: Record<SolvePhase, string> = {
-  init: '准备数据',
-  precheck: '输入与规则检查',
-  build: '生成初始课表',
-  hard_repair: '校验硬约束',
-  optimize: '优化质量指标',
-  polish: '精细打磨',
-  done: '完成'
-}
-
-/** 5 个用户可见阶段，对应侧栏与进度展示 */
-const STEP_LIST: { phase: SolvePhase; title: string; desc: string }[] = [
-  { phase: 'precheck', title: '输入与规则检查', desc: '检查教师工作量、教室容量与规则冲突' },
-  { phase: 'build', title: '生成初始课表', desc: '按连堂/专用教室/主课优先级编排' },
-  { phase: 'hard_repair', title: '校验硬约束', desc: '确保无教师/班级/场地时间重叠' },
-  { phase: 'optimize', title: '优化质量指标', desc: '兼顾教师日负荷、主课时段与学科分散' },
-  { phase: 'polish', title: '精细打磨', desc: '收敛空隙课时与微调局部时段' }
-]
 
 export function SchedulingPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { currentSemester, loaded, load } = useSchoolStore()
-  const meta = useMetaStore()
   const semesterId = currentSemester?.id ?? null
 
   const [profiles, setProfiles] = useState<WeightProfile[]>([])
-  const [selectedProfile, setSelectedProfile] = useState<string>('balanced')
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [profileCode, setProfileCode] = useState('balanced')
+  const [phase, setPhase] = useState<RunPhase>('idle')
   const [progress, setProgress] = useState<ScheduleProgressPayload | null>(null)
   const [done, setDone] = useState<DoneState | null>(null)
   const [versions, setVersions] = useState<ScheduleVersion[]>([])
-  const [runningId, setRunningId] = useState<string | null>(null)
+  /** 本组件实例是否是这次排课的发起方（决定结束后是否弹 toast） */
+  const startedHere = useRef(false)
 
   useEffect(() => {
     if (!loaded) void load()
   }, [loaded, load])
-  useEffect(() => {
-    if (semesterId != null) void meta.load(semesterId)
-  }, [semesterId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    api['weightProfile:list']()
-      .then((rows) => {
-        setProfiles(rows)
-        const def = rows.find((r) => r.isDefault) ?? rows[0]
-        if (def) setSelectedProfile(def.code)
-      })
-      .catch((e) => toast.error(`读取权重配置失败：${String(e)}`))
-  }, [])
-
-  const reloadVersions = (): void => {
+  const refreshVersions = useCallback(async () => {
     if (semesterId == null) return
-    api['schedule:listVersions'](semesterId)
-      .then((rows) => setVersions(rows))
-      .catch((e) => toast.error(`读取版本列表失败：${String(e)}`))
-  }
-  useEffect(() => {
-    reloadVersions()
-  }, [semesterId]) // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      setVersions(await api['schedule:listVersions'](semesterId))
+    } catch {
+      /* 版本列表拉不到不阻塞主流程 */
+    }
+  }, [semesterId])
 
   useEffect(() => {
-    const unsub = scheduleEvents.onScheduleEvent((ev) => {
-      if (ev.type === 'progress') {
-        setProgress(ev)
-      } else if (ev.type === 'done') {
-        setRunningId(null)
+    if (semesterId == null) return
+    void refreshVersions()
+    void api['weightProfile:list']()
+      .then(setProfiles)
+      .catch(() => {})
+    // 页面在排课进行中被重新打开时，恢复「进行中」的显示
+    void api['schedule:isRunning']()
+      .then((running) => {
+        if (running) setPhase('running')
+      })
+      .catch(() => {})
+  }, [semesterId, refreshVersions])
+
+  // 订阅排课事件（预览模式下 scheduleEvents 自动退化为轮询）
+  useEffect(() => {
+    const off = scheduleEvents.onScheduleEvent((e) => {
+      if (e.type === 'progress') {
+        setPhase('running')
+        setProgress(e)
+      } else {
         setPhase('done')
+        setProgress(null)
         setDone({
-          status: ev.status,
-          versionId: ev.versionId,
-          versionName: ev.versionName,
-          lessonCount: ev.lessonCount,
-          lockedCount: ev.lockedCount,
-          skippedFixed: ev.skippedFixed,
-          unplacedCount: ev.unplacedCount,
-          violationCount: ev.violationCount,
-          accidentalBlocks: ev.accidentalBlocks,
-          elapsedMs: ev.elapsedMs,
-          starts: ev.starts,
-          diagnostics: ev.diagnostics,
-          error: ev.error
+          status: e.status,
+          versionId: e.versionId,
+          versionName: e.versionName,
+          lessonCount: e.lessonCount,
+          lockedCount: e.lockedCount,
+          elapsedMs: e.summary?.stats.elapsedMs ?? 0,
+          unplacedCount: e.summary?.unplacedCount ?? 0,
+          violationCount: e.summary?.violations.length ?? 0,
+          accidentalBlocks: e.summary?.stats.accidentalBlocks ?? 0,
+          starts: e.summary?.stats.starts ?? 0,
+          diagnostics: e.summary?.diagnostics ?? [],
+          error: e.error
         })
-        reloadVersions()
-        if (ev.status === 'solved') {
-          toast.success(`排课完成！已生成 ${ev.versionName}，共 ${ev.lessonCount} 节课`)
-        } else if (ev.status === 'partial') {
-          toast.warning(`排课完成但有 ${ev.unplacedCount} 节未排入，请查看诊断卡`)
-        } else if (ev.status === 'infeasible') {
-          toast.error('当前数据无法排出完整课表，请按诊断项调整')
-        } else if (ev.status === 'cancelled') {
-          toast.info('排课已取消')
-        } else {
-          toast.error(`排课失败：${ev.error ?? '未知错误'}`)
+        if (startedHere.current) {
+          if (e.status === 'solved') {
+            toast.success(`排课完成：${e.versionName ?? ''}（${e.lessonCount} 节课，硬约束违反 0）`)
+          } else if (e.status === 'cancelled') {
+            toast.info('已取消本次排课')
+          }
         }
+        startedHere.current = false
+        void refreshVersions()
       }
     })
-    return () => unsub()
-  }, [semesterId]) // eslint-disable-line react-hooks/exhaustive-deps
+    return off
+  }, [refreshVersions])
 
-  const start = async (): Promise<void> => {
-    if (semesterId == null) {
-      toast.error('请先选择学期')
-      return
-    }
-    setPhase('running')
-    setProgress({
-      type: 'progress',
-      runId: 'pending',
-      ratio: 0.05,
-      message: '正在准备排课数据...',
-      phase: 'init',
-      start: 1,
-      totalStarts: 1
-    })
+  const start = useCallback(async () => {
+    if (semesterId == null || phase === 'running') return
     setDone(null)
+    setProgress(null)
     try {
-      const res = await api['schedule:start']({
-        semesterId,
-        weightProfileCode: selectedProfile
-      })
-      setRunningId(res.runId)
-    } catch (e) {
-      setPhase('idle')
-      setProgress(null)
-      toast.error(`启动排课失败：${String(e)}`)
+      await api['schedule:start'](semesterId, { weightProfileCode: profileCode })
+      startedHere.current = true
+      setPhase('running')
+    } catch (err) {
+      toast.error(String(err))
     }
+  }, [semesterId, phase, profileCode])
+
+  const cancel = useCallback(async () => {
+    try {
+      await api['schedule:cancel']()
+    } catch (err) {
+      toast.error(String(err))
+    }
+  }, [])
+
+  const removeVersion = useCallback(
+    async (id: number) => {
+      try {
+        await api['schedule:deleteVersion'](id)
+        toast.success('版本已删除')
+        void refreshVersions()
+      } catch (err) {
+        toast.error(String(err))
+      }
+    },
+    [refreshVersions]
+  )
+
+  if (semesterId == null) {
+    return (
+      <div className="mx-auto max-w-xl rounded-card border border-dashed border-[color:var(--border-subtle)] p-10 text-center text-sm text-[color:var(--text-secondary)]">
+        请先到「学校设置」创建并选择当前学期，再来排课。
+      </div>
+    )
   }
 
-  const cancel = async (): Promise<void> => {
-    if (!runningId) return
-    try {
-      await api['schedule:cancel'](runningId)
-      toast.info('正在取消排课...')
-    } catch (e) {
-      toast.error(`取消失败：${String(e)}`)
-    }
-  }
+  const activeProfiles = profiles.length > 0 ? profiles : []
+  const selectedHint = PROFILE_HINT[profileCode] ?? '软约束权重预设，影响课表质量的取舍方向'
 
-  const removeVersion = async (vid: number): Promise<void> => {
-    if (!confirm('确定删除此排课版本？相关课表数据将一并清理。')) return
-    try {
-      await api['schedule:deleteVersion'](vid)
-      toast.success('已删除排课版本')
-      reloadVersions()
-    } catch (e) {
-      toast.error(`删除失败：${String(e)}`)
-    }
-  }
-
-  const currentStepIndex = useMemo(() => {
-    if (!progress) return -1
-    const p = progress.phase
-    return STEP_LIST.findIndex((s) => s.phase === p)
-  }, [progress])
+  // 阶段清单的完成态：以见过的最靠后 phase 为准
+  const currentPhaseKey = progress?.phase ?? (phase === 'done' ? 'done' : null)
+  const stepIndex = (() => {
+    if (phase === 'done') return STEPS.length
+    if (currentPhaseKey === 'preprocess') return 0
+    if (currentPhaseKey === 'construct' || currentPhaseKey === 'repair') return 1
+    if (currentPhaseKey === 'verify' || currentPhaseKey === 'done') return 2
+    return -1 // running 但还没有任何事件
+  })()
+  const pct = Math.round((progress?.ratio ?? 0) * 100)
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">开始排课</h1>
-        <p className="text-sm text-[color:var(--text-secondary)]">
-          选择排课策略，系统将根据教学任务与排课规则自动生成最优课表
+        <h1 className="text-2xl font-semibold">排课执行</h1>
+        <p className="mt-1 text-sm text-[color:var(--text-secondary)]">
+          一键排出整学期课表 · {currentSemester?.name}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* ── 左侧配置卡 ── */}
-        <Card className="lg:col-span-1">
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* ── 方案卡 ── */}
+        <Card>
           <CardHeader>
-            <CardTitle>排课设置</CardTitle>
+            <CardTitle>排课方案</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            {/* 权重档位 */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-semibold text-[color:var(--text-secondary)]">
-                优化风格
-              </label>
-              <div className="flex flex-col gap-2">
-                {profiles.map((p) => {
-                  const checked = p.code === selectedProfile
-                  return (
-                    <label
-                      key={p.code}
-                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-all ${
-                        checked
-                          ? 'border-brand-600 bg-brand-50/50 shadow-sm dark:bg-brand-950/30'
-                          : 'border-[color:var(--border-subtle)] hover:border-slate-300 dark:hover:border-slate-700'
-                      } ${phase === 'running' ? 'pointer-events-none opacity-60' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="weightProfile"
-                        value={p.code}
-                        checked={checked}
-                        disabled={phase === 'running'}
-                        onChange={() => setSelectedProfile(p.code)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">{p.name}</span>
-                        <span className="text-xs text-[color:var(--text-secondary)]">{p.desc}</span>
-                      </div>
-                    </label>
-                  )
-                })}
+            <div>
+              <p className="mb-2 text-sm font-medium">风格档位</p>
+              <div className="flex flex-col gap-1.5">
+                {(activeProfiles.length > 0
+                  ? activeProfiles
+                  : [{ id: 0, code: 'balanced', name: '均衡', payload: {} } as WeightProfile]
+                ).map((p) => (
+                  <label
+                    key={p.code}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2.5 rounded-card border px-3.5 py-2.5 text-sm transition-colors',
+                      profileCode === p.code
+                        ? 'border-brand-500 bg-brand-50/60 dark:border-brand-500 dark:bg-brand-600/10'
+                        : 'border-[color:var(--border-subtle)] hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="weight-profile"
+                      className="accent-brand-600"
+                      checked={profileCode === p.code}
+                      onChange={() => setProfileCode(p.code)}
+                      disabled={phase === 'running'}
+                    />
+                    <span className="font-medium">{p.name}</span>
+                    {PROFILE_HINT[p.code] && (
+                      <span className="text-xs text-[color:var(--text-secondary)]">
+                        {PROFILE_HINT[p.code]}
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-[color:var(--text-secondary)]">{selectedHint}</p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium">排课范围</p>
+              <div className="flex flex-col gap-1.5">
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-card border border-[color:var(--border-subtle)] px-3.5 py-2.5 text-sm">
+                  <input type="radio" name="scope" checked readOnly className="accent-brand-600" />
+                  <span className="font-medium">全校</span>
+                  <span className="text-xs text-[color:var(--text-secondary)]">
+                    当前学期的全部班级一次排完
+                  </span>
+                </label>
+                <label className="flex cursor-not-allowed items-center gap-2.5 rounded-card border border-dashed border-[color:var(--border-subtle)] px-3.5 py-2.5 text-sm opacity-60">
+                  <input type="radio" name="scope" disabled />
+                  <span>指定年级</span>
+                  <span className="text-xs text-[color:var(--text-secondary)]">
+                    局部重排属后续「交互调整」阶段
+                  </span>
+                </label>
               </div>
             </div>
 
-            {/* 范围选项 */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-semibold text-[color:var(--text-secondary)]">
-                排课范围
-              </label>
-              <div className="rounded-lg border border-[color:var(--border-subtle)] p-3 text-xs text-[color:var(--text-secondary)]">
-                <p className="font-medium text-[color:var(--text-primary)]">全校所有年级全量排课</p>
-                <p className="mt-1">
-                  共 {meta.classes.length} 个班级 · {meta.teachers.filter((t) => t.enabled).length}{' '}
-                  位教师 · {meta.classrooms.filter((r) => r.enabled).length} 间教室
-                </p>
-              </div>
-            </div>
-
-            {/* 启动按钮 */}
             <Button
-              className="w-full"
-              disabled={phase === 'running' || semesterId == null}
+              className="h-11 w-full text-base"
               onClick={() => void start()}
+              disabled={phase === 'running'}
             >
-              {phase === 'running' ? '正在排课中...' : '开始自动排课'}
+              {phase === 'running' ? '正在排课…' : '▶ 开始排课'}
             </Button>
           </CardContent>
         </Card>
 
-        {/* ── 右侧进度 / 结果卡 ── */}
-        <Card className="lg:col-span-2">
+        {/* ── 进度 / 结果卡 ── */}
+        <Card>
           <CardHeader>
-            <CardTitle>
-              {phase === 'idle'
-                ? '排课阶段说明'
-                : phase === 'running'
-                  ? '排课进行中'
-                  : '排课结果'}
-            </CardTitle>
+            <CardTitle>{phase === 'idle' ? '等待开始' : phase === 'running' ? '正在排课' : '排课完成'}</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-6">
+          <CardContent className="flex flex-col gap-5">
             {phase === 'idle' && (
-              <>
-                <p className="text-sm text-[color:var(--text-secondary)]">
-                  点击左侧「开始自动排课」后，系统将在后台依次执行以下 5 个阶段：
-                </p>
-                <ol className="flex flex-col gap-3">
-                  {STEP_LIST.map((s, idx) => (
-                    <li
-                      key={s.phase}
-                      className="flex items-start gap-3 rounded-lg border border-[color:var(--border-subtle)] p-3 text-sm"
-                    >
-                      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-100 text-xs font-semibold dark:bg-slate-800">
-                        {idx + 1}
-                      </span>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{s.title}</span>
-                        <span className="text-xs text-[color:var(--text-secondary)]">{s.desc}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </>
+              <p className="py-8 text-center text-sm text-[color:var(--text-secondary)]">
+                选好风格档位后，点击左侧「开始排课」即可启动自动排课。
+              </p>
             )}
 
             {phase === 'running' && (
               <>
-                {/* 整体进度条 */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between text-xs text-[color:var(--text-secondary)]">
-                    <span>{progress?.message ?? '计算中...'}</span>
-                    <span className="font-semibold tabular-nums">
-                      {Math.round((progress?.ratio ?? 0) * 100)}%
-                    </span>
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span>{progress?.message ?? '正在排课…'}</span>
+                    <span className="font-semibold tabular-nums text-[color:var(--text-secondary)]">{pct}%</span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
-                      className="h-full bg-brand-600 transition-all duration-300"
-                      style={{ width: `${Math.max(4, Math.round((progress?.ratio ?? 0) * 100))}%` }}
+                      className={cn(
+                        'h-full rounded-full bg-brand-500 transition-[width] duration-300',
+                        progress == null && 'w-1/12 animate-pulse'
+                      )}
+                      style={progress != null ? { width: `${Math.max(2, pct)}%` } : undefined}
                     />
                   </div>
-                  {progress && progress.totalStarts > 1 && (
-                    <p className="text-xs text-[color:var(--text-secondary)]">
-                      多起点并行搜索中（{progress.totalStarts} 个起点），将自动采纳得分最高方案
+                  {progress && (
+                    <p className="mt-1.5 text-xs text-[color:var(--text-secondary)]">
+                      {progress.totalStarts > 1
+                        ? `${progress.totalStarts} 个起点并行计算，取最优结果`
+                        : '单起点计算中'}
                     </p>
                   )}
                 </div>
 
-                {/* 步骤列表 */}
-                <ol className="flex flex-col gap-2.5">
-                  {STEP_LIST.map((s, idx) => {
-                    const isDone = currentStepIndex > idx
-                    const isCurrent = currentStepIndex === idx
+                <ol className="flex flex-col gap-2 text-sm">
+                  {STEPS.map((s, i) => {
+                    const state = stepIndex > i ? 'done' : stepIndex === i ? 'active' : 'todo'
                     return (
-                      <li
-                        key={s.phase}
-                        className={`flex items-center gap-3 rounded-lg border p-3 text-sm transition-all ${
-                          isCurrent
-                            ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/20'
-                            : isDone
-                              ? 'border-emerald-200 bg-emerald-50/20 dark:border-emerald-900/30'
-                              : 'border-[color:var(--border-subtle)] opacity-60'
-                        }`}
-                      >
+                      <li key={s.key} className="flex items-center gap-2.5">
                         <span
-                          className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-xs font-semibold ${
-                            isDone
-                              ? 'bg-emerald-600 text-white'
-                              : isCurrent
-                                ? 'bg-brand-600 text-white'
-                                : 'bg-slate-100 text-[color:var(--text-secondary)] dark:bg-slate-800'
-                          }`}
+                          className={cn(
+                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs',
+                            state === 'done' && 'border-emerald-500 bg-emerald-500 text-white',
+                            state === 'active' &&
+                              'animate-pulse border-brand-500 text-brand-600 dark:text-brand-300',
+                            state === 'todo' &&
+                              'border-[color:var(--border-subtle)] text-transparent'
+                          )}
                         >
-                          {isDone ? '✓' : idx + 1}
+                          {state === 'done' ? '✓' : state === 'active' ? '·' : '·'}
                         </span>
-                        <span className="font-medium">{s.title}</span>
-                        {isCurrent && (
-                          <span className="ml-auto text-xs text-brand-600 animate-pulse">
-                            处理中...
-                          </span>
-                        )}
-                        {isDone && (
-                          <span className="ml-auto text-xs text-emerald-600 font-medium">已完成</span>
-                        )}
+                        <span
+                          className={cn(
+                            state === 'todo' && 'text-[color:var(--text-secondary)]',
+                            state === 'active' && 'font-medium'
+                          )}
+                        >
+                          {s.label}
+                        </span>
                       </li>
                     )
                   })}
@@ -615,15 +590,16 @@ function Stat({
   ok?: boolean
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col rounded-lg border border-[color:var(--border-subtle)] p-2.5">
-      <span className="text-xs text-[color:var(--text-secondary)]">{label}</span>
-      <span
-        className={`mt-0.5 text-base font-bold tabular-nums ${
-          ok === true ? 'text-emerald-600' : ok === false ? 'text-amber-600' : ''
-        }`}
+    <div className="rounded-card border border-[color:var(--border-subtle)] px-3 py-2">
+      <p className="text-xs text-[color:var(--text-secondary)]">{label}</p>
+      <p
+        className={cn(
+          'mt-0.5 font-semibold tabular-nums',
+          ok === false && 'text-red-600 dark:text-red-400'
+        )}
       >
         {value}
-      </span>
+      </p>
     </div>
   )
 }

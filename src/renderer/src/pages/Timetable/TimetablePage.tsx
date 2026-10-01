@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-<<<<<<< HEAD
-=======
 import { useSearchParams } from 'react-router-dom'
->>>>>>> 9a60a76 (feat(M7): 完成课表体检报告与统一导出中心 (ReportPage + ExportCenterPage + reportModel))
 import { cn } from '@renderer/lib/utils'
 import { api } from '@renderer/lib/api'
 import { toast } from '@renderer/stores/toastStore'
