@@ -912,7 +912,7 @@ export function TimetablePage(): React.JSX.Element {
         </section>
 
         {view !== 'overview' && (
-          <aside className="w-68 shrink-0 overflow-y-auto">
+          <aside className="w-80 shrink-0 overflow-y-auto overflow-x-hidden">
             <StatsPanel
               view={view}
               lessons={lessons}

@@ -54,7 +54,8 @@ export function SwapSuggestPanel({
           <h3 className="text-[13px] font-semibold text-[color:var(--text-1)]">智能换课建议</h3>
         </div>
         <p className="mt-2 text-xs leading-5 text-[color:var(--text-3)]">
-          在课表中点击任意非锁定课程块，系统将基于全校硬冲突检测与多维度质量模型，为您自动分析并推荐 Top 5 最优调课与对调方案。
+          在课表中点击任意非锁定课程块，系统将基于全校硬冲突检测与多维度质量模型，为您自动分析并推荐
+          Top 5 最优调课与对调方案。
         </p>
       </div>
     )
@@ -62,14 +63,17 @@ export function SwapSuggestPanel({
 
   return (
     <div className="rounded-card border border-brand-200 bg-[color:var(--panel)] p-4 shadow-sm dark:border-brand-900/50">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-base">✨</span>
-          <h3 className="text-[13px] font-semibold text-brand-700 dark:text-brand-300">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-base">✨</span>
+          <h3 className="truncate text-[13px] font-semibold text-brand-700 dark:text-brand-300">
             换课建议 · Top {suggestions.length}
           </h3>
         </div>
-        <span className="text-[11px] font-medium text-[color:var(--text-3)]">
+        <span
+          className="max-w-[130px] truncate text-[11px] font-medium text-[color:var(--text-3)]"
+          title={`当前：${selectedLesson.subjectName} ${selectedLesson.meta ? `(${selectedLesson.meta})` : ''}`}
+        >
           当前：{selectedLesson.subjectName} {selectedLesson.meta ? `(${selectedLesson.meta})` : ''}
         </span>
       </div>
@@ -88,22 +92,26 @@ export function SwapSuggestPanel({
                 key={`${s.targetSlotId}_${idx}`}
                 className="group relative flex flex-col gap-1.5 rounded-md border border-[color:var(--border-subtle)] bg-[color:var(--bg)] p-2.5 transition-all hover:border-brand-400 hover:shadow-xs"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700 dark:bg-brand-900/60 dark:text-brand-200">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700 dark:bg-brand-900/60 dark:text-brand-200">
                       {idx + 1}
                     </span>
-                    <span className="text-xs font-semibold text-[color:var(--text-1)]">
+                    <span className="whitespace-nowrap text-xs font-semibold text-[color:var(--text-1)]">
                       {dayName} {s.targetPeriodName}
                     </span>
-                    <span className="text-[10px] text-[color:var(--text-3)]">
-                      {s.targetSegment === 'morning' ? '上午' : s.targetSegment === 'afternoon' ? '下午' : '晚间'}
+                    <span className="whitespace-nowrap text-[10px] text-[color:var(--text-3)]">
+                      {s.targetSegment === 'morning'
+                        ? '上午'
+                        : s.targetSegment === 'afternoon'
+                          ? '下午'
+                          : '晚间'}
                     </span>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-6 px-2 text-[11px] font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950"
+                    className="h-6 shrink-0 px-2 text-[11px] font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950"
                     onClick={() => onApplySuggestion(s.targetSlotId, s.swappedLesson?.id)}
                   >
                     一键{isMove ? '移入' : '对调'}
@@ -112,13 +120,12 @@ export function SwapSuggestPanel({
 
                 <div className="text-[11px] text-[color:var(--text-2)]">
                   {isMove ? (
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      ➜ 移至空闲槽位
-                    </span>
+                    <span className="text-emerald-600 dark:text-emerald-400">➜ 移至空闲槽位</span>
                   ) : (
-                    <span className="text-blue-600 dark:text-blue-400">
+                    <span className="break-all text-blue-600 dark:text-blue-400">
                       ⇄ 与「{s.swappedLesson?.subjectName}
-                      {s.swappedLesson?.teacherName ? ` (${s.swappedLesson.teacherName})` : ''}」互换
+                      {s.swappedLesson?.teacherName ? ` (${s.swappedLesson.teacherName})` : ''}
+                      」互换
                     </span>
                   )}
                 </div>
