@@ -12,7 +12,7 @@
 - **课表体检与导出**：六维度量化雷达、教师负载分布柱状图、主课时段热力图、Excel 导出（A4 纸单页自适应排版/自定义审签栏）、300 DPI 广告公司大幅面海报流式切片导出（实测支持 23,220 × 10,746 px 巨幅印刷，内存稳定 < 50MB）。
 - **预设与资产**：5 套标准学校示范场景一键载入、版本历史双方案对比、SQLite 数据库本地备份恢复。
 - **质量基线**：
-  - `npm run test:sqlite`：**25 个测试文件、182 个测试全部通过**；
+  - `npm run test:sqlite`：**25 个测试文件、183 个测试全部通过**；
   - `npm run typecheck`：**0 错误**；
   - `npm run lint -- --no-fix`：**0 错误、0 警告**；
   - `npm run build`：生产环境打包成功。
@@ -45,7 +45,7 @@
 1. 阅读 PROGRESS.md，了解项目全局架构、已锁定的架构决策（D1~D9）与工作区纪律；
 2. 阅读 docs/08-会话交接指南.md 与 docs/next-session-evaluation-testing.md；
 3. 执行 git status 与 git log -n 5 确认工作区与提交历史；
-4. 运行 npm run test:sqlite && npm run typecheck && npm run lint -- --no-fix 确认所有 182 个测试与代码规范基线保持全绿。
+4. 运行 npm run test:sqlite && npm run typecheck && npm run lint -- --no-fix 确认所有 183 个测试与代码规范基线保持全绿。
 
 请简要复述你了解到的当前系统状态，并告诉我你已准备好开始接收测试用例、评估任务、Bug 修复或新功能需求。
 ```

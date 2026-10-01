@@ -4,6 +4,7 @@ import { saveSchedule } from './scheduleResultService'
 import { solve, toPlacedLessons } from '@solver/solve'
 import { CURRICULUM_PRESETS } from '@shared/curriculumPresets'
 import type { PresetCode, PresetLoadResult } from '@shared/types/ipc'
+import { loadFullSchoolPreset } from './fullSchoolPresetService'
 
 interface StageConfig {
   id: number
@@ -18,13 +19,58 @@ interface StageConfig {
 }
 
 const FIRST_NAMES = [
-  '伟', '芳', '娜', '秀英', '敏', '静', '丽', '强', '磊', '军',
-  '洋', '勇', '艳', '杰', '娟', '涛', '明', '超', '秀兰', '霞',
-  '平', '刚', '桂英', '英', '华', '婷', '慧', '巧', '美', '玲'
+  '伟',
+  '芳',
+  '娜',
+  '秀英',
+  '敏',
+  '静',
+  '丽',
+  '强',
+  '磊',
+  '军',
+  '洋',
+  '勇',
+  '艳',
+  '杰',
+  '娟',
+  '涛',
+  '明',
+  '超',
+  '秀兰',
+  '霞',
+  '平',
+  '刚',
+  '桂英',
+  '英',
+  '华',
+  '婷',
+  '慧',
+  '巧',
+  '美',
+  '玲'
 ]
 const SURNAMES = [
-  '李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
-  '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗'
+  '李',
+  '王',
+  '张',
+  '刘',
+  '陈',
+  '杨',
+  '赵',
+  '黄',
+  '周',
+  '吴',
+  '徐',
+  '孙',
+  '胡',
+  '朱',
+  '高',
+  '林',
+  '何',
+  '郭',
+  '马',
+  '罗'
 ]
 
 function generateTeacherNames(count: number): string[] {
@@ -45,6 +91,10 @@ function generateTeacherNames(count: number): string[] {
 }
 
 export function loadPreset(preset: PresetCode): PresetLoadResult {
+  // stress 不再使用旧的“6 年级 × 12 班”伪压力数据，而是真正加载
+  // 12 年级 × 20 班的十二年一贯制全功能黄金数据。
+  if (preset === 'stress') return loadFullSchoolPreset()
+
   const db = getDb()
 
   const tx = db.transaction(() => {
@@ -64,6 +114,9 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     db.prepare('DELETE FROM teacher_subject').run()
     db.prepare('DELETE FROM teacher').run()
     db.prepare('DELETE FROM semester').run()
+    // 预设载入是全量覆盖操作；清掉上一套全功能数据增加的学段专属实验学科，
+    // 避免它们污染普通预设的学科列表和轮转教师资格。
+    db.prepare('DELETE FROM subject WHERE stage_id IS NOT NULL').run()
 
     // 2. 配置学校与学期
     let schoolName = '阳光实验完全中学'
@@ -78,12 +131,12 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     } else if (preset === 'primary') {
       schoolName = '阳光实验小学'
       schoolType = 'primary'
-    } else if (preset === 'stress') {
-      schoolName = '领航教育集团实验完全中学（240班压力测试）'
-      schoolType = 'complete'
     }
 
-    db.prepare(`INSERT OR REPLACE INTO school (id, name, school_type) VALUES (1, ?, ?)`).run(schoolName, schoolType)
+    db.prepare(`INSERT OR REPLACE INTO school (id, name, school_type) VALUES (1, ?, ?)`).run(
+      schoolName,
+      schoolType
+    )
 
     const insSem = db.prepare(
       `INSERT INTO semester (name, is_current, start_date, end_date)
@@ -92,30 +145,57 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     const semesterId = Number(insSem.run().lastInsertRowid)
 
     // 3. 配置学段与时段
-    const isPrimaryEnabled = preset === 'primary' || preset === 'complete' || preset === 'stress'
-    const isJuniorEnabled = preset === 'junior' || preset === 'complete' || preset === 'stress'
-    const isSeniorEnabled = preset === 'senior' || preset === 'complete' || preset === 'stress'
+    const isPrimaryEnabled = preset === 'primary' || preset === 'complete'
+    const isJuniorEnabled = preset === 'junior' || preset === 'complete'
+    const isSeniorEnabled = preset === 'senior' || preset === 'complete'
 
     const stageConfigs: StageConfig[] = [
-      { id: 1, code: 'primary', name: '小学部', enabled: isPrimaryEnabled, periodsPerDay: 7, daysPerWeek: 5, morningPeriods: 4, afternoonPeriods: 3, nightPeriods: 0 },
-      { id: 2, code: 'junior', name: '初中部', enabled: isJuniorEnabled, periodsPerDay: 8, daysPerWeek: 5, morningPeriods: 5, afternoonPeriods: 3, nightPeriods: 0 },
-      { id: 3, code: 'senior', name: '高中部', enabled: isSeniorEnabled, periodsPerDay: 13, daysPerWeek: 5, morningPeriods: 5, afternoonPeriods: 4, nightPeriods: 3 }
+      {
+        id: 1,
+        code: 'primary',
+        name: '小学部',
+        enabled: isPrimaryEnabled,
+        periodsPerDay: 7,
+        daysPerWeek: 5,
+        morningPeriods: 4,
+        afternoonPeriods: 3,
+        nightPeriods: 0
+      },
+      {
+        id: 2,
+        code: 'junior',
+        name: '初中部',
+        enabled: isJuniorEnabled,
+        periodsPerDay: 8,
+        daysPerWeek: 5,
+        morningPeriods: 5,
+        afternoonPeriods: 3,
+        nightPeriods: 0
+      },
+      {
+        id: 3,
+        code: 'senior',
+        name: '高中部',
+        enabled: isSeniorEnabled,
+        periodsPerDay: 13,
+        daysPerWeek: 5,
+        morningPeriods: 5,
+        afternoonPeriods: 4,
+        nightPeriods: 3
+      }
     ]
 
-    // 如果是 complete 或 stress，小学部可能不开启，初中和高中开启
-    if (preset === 'complete' || preset === 'stress') {
+    // 高完中不开启小学部，只启用初中和高中。
+    if (preset === 'complete') {
       stageConfigs[0].enabled = false
       stageConfigs[1].enabled = true
       stageConfigs[2].enabled = true
     }
 
     for (const sc of stageConfigs) {
-      db.prepare(`UPDATE stage SET enabled = ?, days_per_week = ?, has_evening = ? WHERE id = ?`).run(
-        sc.enabled ? 1 : 0,
-        sc.daysPerWeek,
-        sc.nightPeriods > 0 ? 1 : 0,
-        sc.id
-      )
+      db.prepare(
+        `UPDATE stage SET enabled = ?, days_per_week = ?, has_evening = ? WHERE id = ?`
+      ).run(sc.enabled ? 1 : 0, sc.daysPerWeek, sc.nightPeriods > 0 ? 1 : 0, sc.id)
       // 重新生成作息表 time_slot
       db.prepare(`DELETE FROM time_slot WHERE stage_id = ?`).run(sc.id)
       if (sc.enabled) {
@@ -189,9 +269,6 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     } else if (preset === 'primary') {
       teacherCount = 60
       classesPerGrade = 6
-    } else if (preset === 'stress') {
-      teacherCount = 180
-      classesPerGrade = 12
     }
 
     const teacherNames = generateTeacherNames(teacherCount)
@@ -236,7 +313,9 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     ]
 
     const specialRoomIds = new Map<string, number>()
-    const insSubjRoom = db.prepare(`INSERT INTO subject_classroom (subject_id, classroom_id, slots_taken, priority) VALUES (?, ?, ?, ?)`)
+    const insSubjRoom = db.prepare(
+      `INSERT INTO subject_classroom (subject_id, classroom_id, slots_taken, priority) VALUES (?, ?, ?, ?)`
+    )
 
     for (const sr of specialRooms) {
       const res = insRoom.run(sr.name, sr.type, sr.cap, sr.con, '实验综合楼')
@@ -273,19 +352,19 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
       )
     } else if (preset === 'senior') {
       gradesToCreate.push(
-        { name: '高一', stageId: 3, planCode: 'senior_g10' },
-        { name: '高二', stageId: 3, planCode: 'senior_g11' },
-        { name: '高三', stageId: 3, planCode: 'senior_g12' }
+        { name: '高一', stageId: 3, planCode: 'senior_g1' },
+        { name: '高二', stageId: 3, planCode: 'senior_g2' },
+        { name: '高三', stageId: 3, planCode: 'senior_g3' }
       )
     } else {
-      // complete or stress
+      // complete
       gradesToCreate.push(
         { name: '初一', stageId: 2, planCode: 'junior_g7' },
         { name: '初二', stageId: 2, planCode: 'junior_g8' },
         { name: '初三', stageId: 2, planCode: 'junior_g9' },
-        { name: '高一', stageId: 3, planCode: 'senior_g10' },
-        { name: '高二', stageId: 3, planCode: 'senior_g11' },
-        { name: '高三', stageId: 3, planCode: 'senior_g12' }
+        { name: '高一', stageId: 3, planCode: 'senior_g1' },
+        { name: '高二', stageId: 3, planCode: 'senior_g2' },
+        { name: '高三', stageId: 3, planCode: 'senior_g3' }
       )
     }
 
@@ -310,7 +389,8 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
       const gRes = insGrade.run(semesterId, gConfig.stageId, gConfig.name, gIdx + 1)
       const gradeId = Number(gRes.lastInsertRowid)
 
-      const plan = CURRICULUM_PRESETS.find((p) => p.code === gConfig.planCode) ?? CURRICULUM_PRESETS[0]
+      const plan =
+        CURRICULUM_PRESETS.find((p) => p.code === gConfig.planCode) ?? CURRICULUM_PRESETS[0]
 
       for (let c = 1; c <= classesPerGrade; c++) {
         const className = `${gConfig.name}(${c})班`
@@ -319,7 +399,14 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
         const homeRoomId = Number(roomRes.lastInsertRowid)
         const headTeacherId = teacherIds[teacherPointer % teacherIds.length]
 
-        const cRes = insClass.run(gradeId, className, shortName, homeRoomId, headTeacherId, classSeq++)
+        const cRes = insClass.run(
+          gradeId,
+          className,
+          shortName,
+          homeRoomId,
+          headTeacherId,
+          classSeq++
+        )
         const classId = Number(cRes.lastInsertRowid)
 
         // 写入教学任务
@@ -331,7 +418,9 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
           const tId = teacherIds[teacherPointer % teacherIds.length]
           teacherPointer++
 
-          const isConsecutive = (entry.subject === '语文' || entry.subject === '物理' || entry.subject === '化学') && entry.periods >= 4
+          const isConsecutive =
+            (entry.subject === '语文' || entry.subject === '物理' || entry.subject === '化学') &&
+            entry.periods >= 4
 
           insTask.run(
             semesterId,
@@ -347,7 +436,9 @@ export function loadPreset(preset: PresetCode): PresetLoadResult {
     }
 
     // 7. 预排锁定课程 (班会、升旗、早读、晚自习)
-    const allSlots = db.prepare(`SELECT id, stage_id, day_of_week, period_index, segment FROM time_slot`).all() as {
+    const allSlots = db
+      .prepare(`SELECT id, stage_id, day_of_week, period_index, segment FROM time_slot`)
+      .all() as {
       id: number
       stage_id: number
       day_of_week: number

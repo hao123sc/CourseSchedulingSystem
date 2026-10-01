@@ -64,7 +64,11 @@ export function HomePage(): React.JSX.Element {
       path: '/setup',
       icon: '⚙️',
       ready: meta.stages.some((s) => s.enabled),
-      statusText: meta.stages.filter((s) => s.enabled).map((s) => s.name).join('、') || '未启用学段'
+      statusText:
+        meta.stages
+          .filter((s) => s.enabled)
+          .map((s) => s.name)
+          .join('、') || '未启用学段'
     },
     {
       step: 2,
@@ -82,7 +86,8 @@ export function HomePage(): React.JSX.Element {
       path: '/teaching-matrix',
       icon: '📋',
       ready: tasks.length > 0,
-      statusText: tasks.length > 0 ? `${tasks.length} 门次 · 周 ${totalWeeklyPeriods} 节` : '待配置课程任务'
+      statusText:
+        tasks.length > 0 ? `${tasks.length} 门次 · 周 ${totalWeeklyPeriods} 节` : '待配置课程任务'
     },
     {
       step: 4,
@@ -181,7 +186,8 @@ export function HomePage(): React.JSX.Element {
               <Badge tone="brand">中小学智能排课系统</Badge>
             </div>
             <p className="text-xs leading-relaxed text-[color:var(--text-secondary)]">
-              {school?.name || '阳光实验完全中学'} · {currentSemester?.name || '2026-2027学年第一学期'}
+              {school?.name || '阳光实验完全中学'} ·{' '}
+              {currentSemester?.name || '2026-2027学年第一学期'}
             </p>
           </div>
 
@@ -203,7 +209,8 @@ export function HomePage(): React.JSX.Element {
           <div className="flex flex-col">
             <span className="text-xs text-[color:var(--text-secondary)]">教学班级</span>
             <div className="mt-1 text-xl font-extrabold text-[color:var(--text-primary)]">
-              {meta.classes.length} <small className="text-xs font-normal text-[color:var(--text-secondary)]">班</small>
+              {meta.classes.length}{' '}
+              <small className="text-xs font-normal text-[color:var(--text-secondary)]">班</small>
             </div>
           </div>
           <div className="flex flex-col">
@@ -223,13 +230,17 @@ export function HomePage(): React.JSX.Element {
           <div className="flex flex-col">
             <span className="text-xs text-[color:var(--text-secondary)]">周课时量</span>
             <div className="mt-1 text-xl font-extrabold text-[color:var(--text-primary)]">
-              {totalWeeklyPeriods} <small className="text-xs font-normal text-[color:var(--text-secondary)]">节/周</small>
+              {totalWeeklyPeriods}{' '}
+              <small className="text-xs font-normal text-[color:var(--text-secondary)]">
+                节/周
+              </small>
             </div>
           </div>
           <div className="flex flex-col">
             <span className="text-xs text-[color:var(--text-secondary)]">排课版本</span>
             <div className="mt-1 text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
-              {versions.length} <small className="text-xs font-normal text-[color:var(--text-secondary)]">版</small>
+              {versions.length}{' '}
+              <small className="text-xs font-normal text-[color:var(--text-secondary)]">版</small>
             </div>
           </div>
         </div>
@@ -313,7 +324,8 @@ export function HomePage(): React.JSX.Element {
                   <Badge tone="brand">主演示</Badge>
                 </div>
                 <p className="text-xs leading-relaxed text-[color:var(--text-secondary)]">
-                  初中 8 节/天 + 高中 13 节/天（早读+晚自习）；256 位教师、141 间教室；初高中双学段全量排课。
+                  初中 8 节/天 + 高中 13 节/天（早读+晚自习）；256 位教师、141
+                  间教室；初高中双学段全量排课。
                 </p>
               </div>
               <Button
@@ -379,7 +391,8 @@ export function HomePage(): React.JSX.Element {
                   <Badge tone="slate">小学</Badge>
                 </div>
                 <p className="text-xs leading-relaxed text-[color:var(--text-secondary)]">
-                  一至六年级各 20 班；7 节/天作息；180 位教师、130 间教室；低段 26 节、中高段 30 节。
+                  一至六年级各 20 班；7 节/天作息；180 位教师、130 间教室；低段 26 节、中高段 30
+                  节。
                 </p>
               </div>
               <Button
@@ -393,15 +406,16 @@ export function HomePage(): React.JSX.Element {
               </Button>
             </div>
 
-            {/* 5. 压力测试 240 班 */}
-            <div className="flex flex-col justify-between rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--bg-card)] p-4">
+            {/* 5. 十二年一贯制全功能黄金数据 */}
+            <div className="flex flex-col justify-between rounded-xl border border-amber-300 bg-amber-50/40 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold">大型压力测试（240班）</span>
-                  <Badge tone="amber">超大型并发</Badge>
+                  <span className="text-sm font-bold">十二年一贯制全功能测试校（240班）</span>
+                  <Badge tone="amber">容量上限</Badge>
                 </div>
                 <p className="text-xs leading-relaxed text-[color:var(--text-secondary)]">
-                  240 班、480 位教师、260 间教室；7800 节课程极限并发求解测试。
+                  小一至高三各 20 班、每班 54 人；547 位教师、347 间场地、约 7220
+                  节正课，覆盖单双周、连堂、实验室、预排与全部约束类型。
                 </p>
               </div>
               <Button
@@ -411,7 +425,9 @@ export function HomePage(): React.JSX.Element {
                 disabled={loadingPreset !== null}
                 onClick={() => handleLoadPreset('stress')}
               >
-                {loadingPreset === 'stress' ? '正在载入与求解...' : '载入 240 班极限数据'}
+                {loadingPreset === 'stress'
+                  ? '正在生成 240 班黄金课表...'
+                  : '载入十二年一贯制全功能数据'}
               </Button>
             </div>
           </div>
@@ -447,7 +463,14 @@ export function HomePage(): React.JSX.Element {
                 <div>
                   <span className="text-[color:var(--text-secondary)]">生成时间</span>
                   <div className="mt-0.5 text-sm font-semibold text-[color:var(--text-primary)]">
-                    {latestVersion.createdAt ? new Date(latestVersion.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '刚刚'}
+                    {latestVersion.createdAt
+                      ? new Date(latestVersion.createdAt).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : '刚刚'}
                   </div>
                 </div>
               </div>
