@@ -1,0 +1,271 @@
+import { describe, expect, it } from 'vitest'
+import { loadPreset, resetAllData } from './presetService'
+import { FULL_SCHOOL_EXPECTED } from './fullSchoolPresetService'
+import { checkSolverInput } from './solverInputService'
+import { getDb } from '../db/connection'
+
+describe('M8 · 预设示范数据与一键体验', () => {
+  it('resets all business data back to initial factory state', () => {
+    loadPreset('junior')
+    const res = resetAllData()
+    expect(res.success).toBe(true)
+
+    const db = getDb()
+    const scalar = (sql: string): number => (db.prepare(sql).get() as { n: number }).n
+    expect(scalar('SELECT COUNT(*) n FROM school')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM semester')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM grade')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM klass')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM teacher')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM classroom')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM teaching_task')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM fixed_lesson')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM constraint_group')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM schedule_version')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM lesson')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM adjust_log')).toBe(0)
+    expect(scalar('SELECT COUNT(*) n FROM subject')).toBe(19)
+    expect(scalar('SELECT COUNT(*) n FROM subject WHERE stage_id IS NOT NULL')).toBe(0)
+
+    const stages = db
+      .prepare(
+        `SELECT s.code, COUNT(ts.id) n FROM stage s
+          LEFT JOIN time_slot ts ON ts.stage_id=s.id
+         WHERE s.enabled=1 GROUP BY s.id ORDER BY s.sort_order`
+      )
+      .all() as { code: string; n: number }[]
+    expect(stages).toEqual([
+      { code: 'primary', n: 35 },
+      { code: 'junior', n: 40 },
+      { code: 'senior', n: 65 }
+    ])
+  })
+
+  it('loads "junior" preset and verifies database records', () => {
+    const res = loadPreset('junior')
+    expect(res.success).toBe(true)
+    expect(res.semesterId).toBeGreaterThan(0)
+
+    const db = getDb()
+    const school = db.prepare('SELECT name, school_type FROM school WHERE id = 1').get() as {
+      name: string
+      school_type: string
+    }
+    expect(school.name).toBe('阳光实验初级中学')
+    expect(school.school_type).toBe('junior')
+
+    // 检查年级班级
+    const grades = db
+      .prepare('SELECT COUNT(*) as n FROM grade WHERE semester_id = ?')
+      .get(res.semesterId) as { n: number }
+    expect(grades.n).toBe(3) // 初一、初二、初三
+
+    const classes = db
+      .prepare(
+        'SELECT COUNT(*) as n FROM klass k JOIN grade g ON g.id = k.grade_id WHERE g.semester_id = ?'
+      )
+      .get(res.semesterId) as { n: number }
+    expect(classes.n).toBe(60) // 3 年级 × 20 班 = 60 班
+
+    // 检查教学任务
+    const tasks = db
+      .prepare('SELECT COUNT(*) as n FROM teaching_task WHERE semester_id = ?')
+      .get(res.semesterId) as { n: number }
+    expect(tasks.n).toBeGreaterThan(100)
+
+    // 自检检查：保证无阻塞错误和提醒
+    const checkReport = checkSolverInput(res.semesterId)
+    expect(checkReport.ok).toBe(true)
+    expect(checkReport.issues.filter((i) => i.level === 'error')).toEqual([])
+    expect(checkReport.issues.filter((i) => i.level === 'warn')).toEqual([])
+
+    // 检查是否自动生成并发布了初始排课方案
+    const versions = db
+      .prepare('SELECT COUNT(*) as n FROM schedule_version WHERE semester_id = ?')
+      .get(res.semesterId) as { n: number }
+    expect(versions.n).toBeGreaterThanOrEqual(1)
+  })
+
+  it('loads "senior" preset with night study and reading slots', () => {
+    const res = loadPreset('senior')
+    expect(res.success).toBe(true)
+
+    const db = getDb()
+    const slots = db.prepare('SELECT COUNT(*) as n FROM time_slot WHERE stage_id = 3').get() as {
+      n: number
+    }
+    expect(slots.n).toBe(65) // 高中 13 节/天 × 5 天 = 65 槽
+
+    // 自检检查：保证无阻塞错误和提醒
+    const checkReport = checkSolverInput(res.semesterId)
+    expect(checkReport.ok).toBe(true)
+    expect(checkReport.issues.filter((i) => i.level === 'error')).toEqual([])
+    expect(checkReport.issues.filter((i) => i.level === 'warn')).toEqual([])
+  })
+
+  it('loads "complete" preset and passes solver input check cleanly', () => {
+    const res = loadPreset('complete')
+    expect(res.success).toBe(true)
+
+    const checkReport = checkSolverInput(res.semesterId)
+    expect(checkReport.ok).toBe(true)
+    expect(checkReport.issues.filter((i) => i.level === 'error')).toEqual([])
+    expect(checkReport.issues.filter((i) => i.level === 'warn')).toEqual([])
+    expect(checkReport.stats.classes).toBe(120) // 6 年级 × 20 班 = 120 班
+  })
+
+  it('loads the real 240-class twelve-year golden dataset with complete resources and schedules', () => {
+    const res = loadPreset('stress')
+    expect(res.success).toBe(true)
+    expect(res.versionId).toBeGreaterThan(0)
+
+    const db = getDb()
+    const scalar = (sql: string, ...params: unknown[]): number =>
+      (db.prepare(sql).get(...params) as { n: number }).n
+    const school = db.prepare('SELECT name, school_type FROM school WHERE id=1').get() as {
+      name: string
+      school_type: string
+    }
+    expect(school).toEqual({
+      name: FULL_SCHOOL_EXPECTED.schoolName,
+      school_type: 'twelve_year'
+    })
+    expect(scalar('SELECT COUNT(*) n FROM grade WHERE semester_id=?', res.semesterId)).toBe(12)
+    expect(
+      scalar(
+        `SELECT COUNT(*) n FROM klass k JOIN grade g ON g.id=k.grade_id
+            WHERE g.semester_id=?`,
+        res.semesterId
+      )
+    ).toBe(FULL_SCHOOL_EXPECTED.classes)
+    expect(
+      scalar(
+        `SELECT SUM(k.student_count) n FROM klass k JOIN grade g ON g.id=k.grade_id
+            WHERE g.semester_id=?`,
+        res.semesterId
+      )
+    ).toBe(FULL_SCHOOL_EXPECTED.students)
+    expect(scalar('SELECT COUNT(*) n FROM teacher WHERE enabled=1')).toBe(
+      FULL_SCHOOL_EXPECTED.teachers
+    )
+    expect(scalar('SELECT COUNT(*) n FROM classroom WHERE enabled=1')).toBe(
+      FULL_SCHOOL_EXPECTED.rooms
+    )
+    expect(scalar('SELECT COUNT(*) n FROM subject')).toBe(FULL_SCHOOL_EXPECTED.subjects)
+    expect(scalar('SELECT COUNT(*) n FROM teaching_task WHERE semester_id=?', res.semesterId)).toBe(
+      FULL_SCHOOL_EXPECTED.tasks
+    )
+    expect(
+      scalar('SELECT SUM(weekly_periods) n FROM teaching_task WHERE semester_id=?', res.semesterId)
+    ).toBe(FULL_SCHOOL_EXPECTED.rawTaskPeriods)
+    expect(scalar('SELECT COUNT(*) n FROM fixed_lesson WHERE semester_id=?', res.semesterId)).toBe(
+      FULL_SCHOOL_EXPECTED.fixedLessons
+    )
+    expect(scalar('SELECT COUNT(DISTINCT head_teacher_id) n FROM klass')).toBe(240)
+    expect(
+      scalar('SELECT COUNT(*) n FROM constraint_group WHERE semester_id=?', res.semesterId)
+    ).toBe(12)
+    expect(scalar("SELECT COUNT(*) n FROM teaching_task WHERE week_mode IN ('odd','even')")).toBe(8)
+    expect(
+      scalar('SELECT COUNT(*) n FROM teaching_task WHERE consecutive_count > 0')
+    ).toBeGreaterThan(0)
+    expect(scalar("SELECT MIN(capacity) n FROM classroom WHERE room_type='normal'")).toBe(60)
+
+    const stages = db
+      .prepare(
+        `SELECT s.code, COUNT(ts.id) n FROM stage s
+          LEFT JOIN time_slot ts ON ts.stage_id=s.id
+         WHERE s.enabled=1 GROUP BY s.id ORDER BY s.sort_order`
+      )
+      .all() as { code: string; n: number }[]
+    expect(stages).toEqual([
+      { code: 'primary', n: 35 },
+      { code: 'junior', n: 40 },
+      { code: 'senior', n: 65 }
+    ])
+
+    const overloads = scalar(
+      `SELECT COUNT(*) n FROM (
+           SELECT t.id
+             FROM teacher t JOIN teaching_task x ON x.teacher_id=t.id
+            GROUP BY t.id HAVING SUM(x.weekly_periods) > t.max_weekly_periods
+         )`
+    )
+    expect(overloads).toBe(0)
+
+    const report = checkSolverInput(res.semesterId)
+    expect(report.ok).toBe(true)
+    expect(report.stats.unassignedTasks).toBe(0)
+    expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+
+    expect(
+      scalar('SELECT COUNT(*) n FROM schedule_version WHERE semester_id=?', res.semesterId)
+    ).toBe(FULL_SCHOOL_EXPECTED.versions)
+    expect(
+      scalar(
+        'SELECT COUNT(*) n FROM schedule_version WHERE semester_id=? AND is_published=1',
+        res.semesterId
+      )
+    ).toBe(1)
+    expect(
+      scalar(
+        'SELECT COUNT(*) n FROM schedule_version WHERE semester_id=? AND hard_violations<>0',
+        res.semesterId
+      )
+    ).toBe(0)
+    const versionMetrics = db
+      .prepare('SELECT metrics FROM schedule_version WHERE semester_id=? ORDER BY id')
+      .all(res.semesterId) as { metrics: string }[]
+    expect(versionMetrics.map((row) => JSON.parse(row.metrics).usedFallback)).toEqual([
+      false,
+      false,
+      false
+    ])
+
+    // 240 班 × 5 天 = 1200 个班级日。S16 是软约束，不强求绝对为零；三个
+    // 档位都必须把首节空堂控制在 1% 以内。早读不算“第1节”。
+    const firstPeriodGaps = db
+      .prepare(
+        `WITH first_slots AS (
+           SELECT id, stage_id, day_of_week FROM time_slot WHERE period_name='第1节'
+         ), classes AS (
+           SELECT k.id class_id, g.stage_id FROM klass k JOIN grade g ON g.id=k.grade_id
+            WHERE g.semester_id=?
+         ), expected AS (
+           SELECT v.id version_id, c.class_id, fs.day_of_week
+             FROM schedule_version v JOIN classes c
+             JOIN first_slots fs ON fs.stage_id=c.stage_id
+            WHERE v.semester_id=?
+         ), occupied AS (
+           SELECT l.version_id, l.class_id, ts.day_of_week
+             FROM lesson l JOIN time_slot ts ON ts.id=l.slot_id
+            WHERE ts.period_name='第1节'
+           UNION
+           SELECT v.id, k.id, ts.day_of_week
+             FROM schedule_version v
+             JOIN fixed_lesson f ON f.semester_id=v.semester_id
+             JOIN time_slot ts ON ts.id=f.slot_id AND ts.period_name='第1节'
+             JOIN klass k ON (k.id=f.class_id OR (f.class_id IS NULL AND k.grade_id=f.grade_id))
+            WHERE f.kind='lesson'
+         )
+         SELECT e.version_id, SUM(CASE WHEN o.class_id IS NULL THEN 1 ELSE 0 END) gaps
+           FROM expected e LEFT JOIN occupied o
+             ON o.version_id=e.version_id AND o.class_id=e.class_id
+            AND o.day_of_week=e.day_of_week
+          GROUP BY e.version_id ORDER BY e.version_id`
+      )
+      .all(res.semesterId, res.semesterId) as { version_id: number; gaps: number }[]
+    expect(firstPeriodGaps).toHaveLength(3)
+    expect(firstPeriodGaps.every((row) => row.gaps <= 10)).toBe(true)
+
+    expect(
+      scalar(
+        `SELECT MIN(n) n FROM (
+             SELECT COUNT(*) n FROM lesson l JOIN schedule_version v ON v.id=l.version_id
+              WHERE v.semester_id=? GROUP BY v.id
+           )`,
+        res.semesterId
+      )
+    ).toBe(FULL_SCHOOL_EXPECTED.rawTaskPeriods)
+  }, 60_000)
+})
