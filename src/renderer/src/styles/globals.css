@@ -1,0 +1,570 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-page: #f8fafc;
+  --bg-card: #ffffff;
+  --border-subtle: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  /* 课表页（mockup token 命名，指向同一套值） */
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --text: #0f172a;
+  --text-2: #64748b;
+  --text-3: #94a3b8;
+}
+
+.dark {
+  --bg-page: #0f172a;
+  --bg-card: #1e293b;
+  --border-subtle: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --panel: #1e293b;
+  --panel-2: #0f172a;
+  --text: #f1f5f9;
+  --text-2: #94a3b8;
+  --text-3: #64748b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-[color:var(--bg-page)] text-[color:var(--text-primary)];
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================================
+   M4 · 课表页（docs/mockups/timetable.html 定稿样式）
+   ========================================================================== */
+
+/* ---- 课程块 ---- */
+.tt-cell {
+  position: relative;
+  height: 56px;
+  /* 课程块为绝对定位，格子不能带内边距，否则包含块错位 */
+  padding: 0;
+}
+.tt-lesson {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--s-bg);
+  border: 1px solid var(--s-bd);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  cursor: grab;
+  overflow: hidden;
+  /* 从 --s-ac 派生全套（inline 只注入 --s-ac，深色模式在这里整套换参数） */
+  --s-bg: color-mix(in srgb, var(--s-ac, #94a3b8) 7%, var(--panel));
+  --s-tx: color-mix(in srgb, var(--s-ac, #94a3b8) 72%, #111827);
+  --s-bd: color-mix(in srgb, var(--s-ac, #94a3b8) 26%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tt-lesson::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--s-ac);
+  border-radius: 8px 0 0 8px;
+}
+.tt-lesson .tt-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--s-tx);
+  line-height: 17px;
+}
+.tt-lesson .tt-meta {
+  font-size: 11px;
+  color: var(--text-2, #64748b);
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tt-lesson:hover {
+  transform: scale(1.025);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  z-index: 5;
+}
+.dark .tt-lesson {
+  --s-bg: color-mix(in srgb, var(--s-ac, #94a3b8) 20%, var(--panel));
+  --s-tx: color-mix(in srgb, var(--s-ac, #94a3b8) 40%, #f1f5f9);
+  --s-bd: color-mix(in srgb, var(--s-ac, #94a3b8) 34%, transparent);
+}
+.tt-lesson.tt-sel {
+  border: 2px solid #4f46e5 !important;
+  box-shadow:
+    0 0 0 3px #eef2ff,
+    0 4px 12px rgba(79, 70, 229, 0.25) !important;
+  z-index: 8;
+}
+.dark .tt-lesson.tt-sel {
+  border-color: #818cf8 !important;
+  box-shadow:
+    0 0 0 3px #1e1b4b,
+    0 4px 12px rgba(99, 102, 241, 0.35) !important;
+}
+
+/* 调课模式下：可对调课程显眼高亮（翡翠绿边框 + 辉光 + 悬停微缩放） */
+.tt-lesson.tt-droppable {
+  border: 2px solid #10b981 !important;
+  box-shadow:
+    0 0 0 2px rgba(16, 185, 129, 0.3),
+    0 2px 8px rgba(16, 185, 129, 0.2) !important;
+  cursor: pointer;
+  z-index: 4;
+}
+.dark .tt-lesson.tt-droppable {
+  border-color: #34d399 !important;
+  box-shadow:
+    0 0 0 2px rgba(52, 211, 153, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+.tt-lesson.tt-droppable:hover {
+  transform: scale(1.04);
+  box-shadow:
+    0 0 0 3px rgba(16, 185, 129, 0.5),
+    0 6px 16px rgba(16, 185, 129, 0.3) !important;
+  z-index: 10;
+}
+
+/* 调课模式下：不可对调的冲突课程弱化灰度置底，突显可调目标 */
+.tt-lesson.tt-disabled {
+  opacity: 0.38 !important;
+  filter: grayscale(40%);
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+.tt-lesson.tt-disabled:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  opacity: 0.55 !important;
+}
+
+.tt-swap-tag {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9.5px;
+  line-height: 13px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #10b981;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  letter-spacing: 0.3px;
+  z-index: 3;
+}
+.dark .tt-swap-tag {
+  background: #059669;
+}
+
+.tt-source-tag {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9.5px;
+  line-height: 13px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #4f46e5;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  letter-spacing: 0.3px;
+  z-index: 3;
+}
+/* 连堂跨行：56×N + 5×(N−1)，与视觉稿 .lesson.span2 同口径 */
+.tt-lesson.tt-span {
+  z-index: 2;
+}
+/* 同格多课（多并发场地的教室视图）：紧凑堆叠行 */
+.tt-lesson.tt-compact {
+  padding: 1px 6px;
+  gap: 0;
+}
+.tt-lesson.tt-compact .tt-name {
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tt-lesson.tt-compact:hover {
+  transform: none;
+  box-shadow: 0 0 0 1px var(--s-bd);
+  z-index: 6;
+}
+.tt-tag {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9px;
+  line-height: 13px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--s-ac) 18%, transparent);
+  color: var(--s-tx);
+  font-weight: 600;
+}
+.tt-lock {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 10px;
+  opacity: 0.55;
+}
+/* 预排叠加（升旗/早读/晚自习/班会）：无学科的用中性灰（其余变量自动派生） */
+.tt-lesson.tt-dim {
+  --s-ac: #94a3b8;
+}
+.dark .tt-lesson.tt-dim {
+  --s-ac: #64748b;
+}
+
+/* ---- 空格 / 教师空隙 ---- */
+.tt-empty {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  border: 1px dashed #e2e8f0;
+}
+.dark .tt-empty {
+  border-color: #334155;
+}
+.tt-gap {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 5px,
+    #e2e8f0 5px,
+    #e2e8f0 6px
+  );
+  border: 1px dashed #cbd5e1;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #94a3b8;
+}
+.dark .tt-gap {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 5px,
+    #334155 5px,
+    #334155 6px
+  );
+  border-color: #475569;
+}
+
+/* ---- 段分隔条（午休 / 晚间） ---- */
+.tt-divider-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0;
+  color: #94a3b8;
+  font-size: 11px;
+}
+.tt-divider-bar::before,
+.tt-divider-bar::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+.dark .tt-divider-bar::before,
+.dark .tt-divider-bar::after {
+  background: #334155;
+}
+
+/* ---- 排课完成后的瀑布式淡入 ---- */
+@keyframes tt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tt-fall {
+  animation: tt-rise 260ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ---- 全校总表 ---- */
+.ov-corner {
+  position: sticky;
+  left: 0;
+  z-index: 40;
+  background: var(--panel);
+}
+.ov-corner2 {
+  position: sticky;
+  left: 34px;
+  z-index: 40;
+  background: var(--panel);
+  border-right: 2px solid #cbd5e1;
+}
+.dark .ov-corner2 {
+  border-right-color: #475569;
+}
+table.ov {
+  border-collapse: collapse;
+}
+table.ov th.gh {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2, #64748b);
+  padding: 5px 0;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 26px;
+  background: var(--panel);
+}
+table.ov th.ch {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2, #64748b);
+  padding: 4px 0 6px;
+  position: sticky;
+  top: 26px;
+  z-index: 30;
+  height: 28px;
+  background: var(--panel);
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
+}
+.dark table.ov th.ch {
+  border-color: #334155;
+  background: #1e293b;
+}
+table.ov td.c {
+  width: var(--cw, 58px);
+  min-width: var(--cw, 58px);
+  height: var(--ch, 30px);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-right: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  /* 学科色：单元格只给 --s-ac，bg / tx 从它派生（浅深色各自成立） */
+  --s-ac: #94a3b8;
+  background: color-mix(in srgb, var(--s-ac) 8%, var(--panel));
+  color: color-mix(in srgb, var(--s-ac) 68%, var(--text));
+  box-shadow: inset 2px 0 0 var(--s-ac);
+}
+.dark table.ov td.c {
+  background: color-mix(in srgb, var(--s-ac) 18%, var(--panel));
+  color: color-mix(in srgb, var(--s-ac) 45%, var(--text));
+}
+table.ov td.c.ov-empty {
+  background: var(--panel-2);
+  color: var(--text-3);
+  box-shadow: none;
+  font-weight: 400;
+}
+.dark table.ov td.c {
+  border-color: #172033;
+}
+table.ov td.c.gend {
+  border-right: 1px solid #cbd5e1;
+}
+.dark table.ov td.c.gend {
+  border-color: #475569;
+}
+table.ov td.dh {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2, #64748b);
+  width: 34px;
+  min-width: 34px;
+  text-align: center;
+  border-bottom: 1px solid #f1f5f9;
+  background: var(--panel);
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  border-right: 2px solid #cbd5e1;
+}
+table.ov td.ph {
+  font-size: 11px;
+  color: #94a3b8;
+  width: 26px;
+  min-width: 26px;
+  text-align: center;
+  background: var(--panel);
+  border-bottom: 1px solid #f1f5f9;
+  position: sticky;
+  left: 34px;
+  z-index: 25;
+  border-right: 2px solid #cbd5e1;
+}
+.dark table.ov td.dh,
+.dark table.ov td.ph {
+  border-bottom-color: #172033;
+  border-right-color: #475569;
+}
+table.ov td.c .t {
+  font-weight: 400;
+  font-size: 10px;
+  opacity: 0.75;
+  margin-left: 3px;
+}
+/* 降级渲染：<85% 只留简称，<55% 纯色块 */
+.ov-sheet.ov-compact table.ov td.c .t {
+  display: none;
+}
+.ov-sheet.ov-micro table.ov td.c {
+  font-size: 0;
+  color: transparent;
+}
+/* 行级虚拟化：屏外行跳过渲染，保证 240 班滚动流畅 */
+table.ov tr.ovr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--ch, 30px);
+}
+/* 悬停 tooltip */
+.ov-tip {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  background: var(--panel);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  min-width: 150px;
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ov-tip.show {
+  opacity: 1;
+}
+.ov-tip .th {
+  font-weight: 600;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ov-tip .r {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 1.5px 0;
+  color: var(--text-2, #64748b);
+}
+.ov-tip .r b {
+  color: var(--text, inherit);
+  font-weight: 500;
+}
+
+/* ============================================================================
+   M8 · 打印排版优化 (@media print)
+   ========================================================================== */
+@media print {
+  /* 隐藏所有普通主应用界面与模态框 */
+  #root,
+  header,
+  nav,
+  aside,
+  button,
+  .no-print,
+  [role='dialog'],
+  .fixed.inset-0 {
+    display: none !important;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 批量打印容器接管输出（Portal 挂载在 body 根节点下） */
+  #printable-batch-area {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .print-page-sheet {
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    padding: 5mm 6mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .print-page-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* 课表网格打印适配 */
+  table {
+    page-break-inside: avoid !important;
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th,
+  td {
+    border: 1px solid #334155 !important;
+    color: #000000 !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+}
